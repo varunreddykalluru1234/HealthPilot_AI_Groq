@@ -200,7 +200,7 @@ export function extractDate(text: string): string | null {
     const m = text.match(p);
     if (m) {
       const parts = (m[1] ?? '').includes('/') ? (m[1] ?? '').split('/') : (m[1] ?? '').split('-');
-      let candidate = m[0].replace(/^[^0-9]+/, '').trim();
+      const candidate = m[0].replace(/^[^0-9]+/, '').trim();
       const d = normalizeDate(candidate);
       if (d) return d;
     }

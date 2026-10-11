@@ -31,24 +31,31 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const GROQ_MODEL    = 'llama-3.1-8b-instant';
+const GROQ_MODEL = 'openai/gpt-oss-20b';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 // Allowed origins — add your production domain here
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://healthpilot.ai',          // ← replace with your real domain
+  'https://aipoweredpersonalhealthcopilot.netlify.app',
 ];
 
 // ─── CORS helpers ─────────────────────────────────────────────────────────────
 
 function corsHeaders(origin: string): Record<string, string> {
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const isAllowed =
+    !origin ||
+    ALLOWED_ORIGINS.includes(origin) ||
+    origin.endsWith('.netlify.app') ||
+    origin.startsWith('http://localhost:');
+
+  const allowedOrigin = isAllowed ? (origin || '*') : ALLOWED_ORIGINS[0];
+
   return {
-    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Origin':  allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
     'Access-Control-Max-Age':       '86400',
   };
 }
