@@ -29,7 +29,27 @@ type AppView = 'landing' | 'auth' | 'onboarding' | 'app' | 'reset';
 function AppContent() {
   const { state } = useApp();
   const { page, navigate } = useRouter();
-  const [view, setView] = useState<AppView>('landing');
+  const [view, setView] = useState<AppView>(() => {
+    try {
+      const lastUser = localStorage.getItem('healthpilot_last_user_id');
+      if (lastUser) {
+        const raw = localStorage.getItem(`healthpilot_user_${lastUser}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.isAuthenticated) return 'app';
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 'landing';
+  });
+
+  useEffect(() => {
+    if (state.isAuthenticated && view === 'landing') {
+      setView('app');
+    }
+  }, [state.isAuthenticated]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

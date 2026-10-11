@@ -11,6 +11,12 @@ import {
 } from '@/data/demoData';
 
 const STORAGE_KEY = 'healthpilot_state_v1';
+const LAST_USER_KEY = 'healthpilot_last_user_id';
+
+export function getStorageKey(userId?: string | null): string {
+  if (userId) return `healthpilot_user_${userId}`;
+  return STORAGE_KEY;
+}
 
 export function createEmptyState(): AppState {
   return {
@@ -63,9 +69,11 @@ export function createDemoState(): AppState {
   };
 }
 
-export function loadState(): AppState {
+export function loadState(userId?: string | null): AppState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const effectiveUserId = userId || localStorage.getItem(LAST_USER_KEY);
+    const key = getStorageKey(effectiveUserId);
+    const raw = localStorage.getItem(key) || (key !== STORAGE_KEY ? localStorage.getItem(STORAGE_KEY) : null);
     if (!raw) return createEmptyState();
     const parsed = JSON.parse(raw) as AppState;
     // Demo mode is an exploration session — do not persist as an active login on new visits
@@ -78,15 +86,33 @@ export function loadState(): AppState {
   }
 }
 
-export function saveState(state: AppState): void {
+export function saveState(state: AppState, userId?: string | null): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    // If exploring demo mode, do not overwrite real user data
+    if (state.mode === 'demo') {
+      return;
+    }
+    // If state is logged out and no user is provided, don't wipe stored user state
+    if (!state.isAuthenticated && !userId) {
+      return;
+    }
+    const effectiveUserId = userId || localStorage.getItem(LAST_USER_KEY);
+    if (effectiveUserId) {
+      localStorage.setItem(LAST_USER_KEY, effectiveUserId);
+    }
+    const key = getStorageKey(effectiveUserId);
+    localStorage.setItem(key, JSON.stringify(state));
   } catch {
     // storage full or unavailable — non-critical
   }
 }
 
-export function clearState(): void {
+export function clearState(userId?: string | null): void {
+  const effectiveUserId = userId || localStorage.getItem(LAST_USER_KEY);
+  if (effectiveUserId) {
+    localStorage.removeItem(getStorageKey(effectiveUserId));
+    localStorage.removeItem(LAST_USER_KEY);
+  }
   localStorage.removeItem(STORAGE_KEY);
 }
 

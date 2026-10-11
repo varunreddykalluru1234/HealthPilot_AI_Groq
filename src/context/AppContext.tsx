@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useReducer, type ReactNode } from 'react';
 import type {
   AppState,
   UserProfile,
@@ -14,6 +14,7 @@ import type {
   AbhaConnection,
 } from '@/types';
 import { loadState, saveState, createEmptyState, createDemoState, addTimelineEvent } from '@/services/dataService';
+import { fetchUserCloudState, syncUserCloudStateDebounced } from '@/services/supabaseStorageService';
 import { generateHealthInsights } from '@/services/aiService';
 import { uid } from '@/utils/helpers';
 import { supabase } from '@/lib/supabase';
@@ -229,24 +230,88 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, null, () => loadState());
+  const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
+    return localStorage.getItem('healthpilot_last_user_id');
+  });
+  const [state, dispatch] = useReducer(reducer, null, () => loadState(localStorage.getItem('healthpilot_last_user_id')));
 
+  // Persist state locally and sync to Supabase Cloud Database
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    saveState(state, currentUserId);
+    if (currentUserId && state.mode === 'real' && state.isAuthenticated) {
+      syncUserCloudStateDebounced(currentUserId, state);
+    }
+  }, [state, currentUserId]);
 
+  // Auth listener and cloud database hydration
   useEffect(() => {
     if (!supabase) return;
+
+    // 1. Check initial active session on page load
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user?.id) {
+        const userId = session.user.id;
+        setCurrentUserId(userId);
+        
+        // Hydrate from fast local cache first
+        const localCached = loadState(userId);
+        if (localCached.isAuthenticated) {
+          dispatch({ type: 'HYDRATE', state: localCached });
+        } else {
+          dispatch({ type: 'LOGIN', mode: 'real' });
+        }
+
+        // Hydrate from Supabase Cloud Database
+        const cloudState = await fetchUserCloudState(userId);
+        if (cloudState && (cloudState.profile || cloudState.isOnboarded)) {
+          dispatch({
+            type: 'HYDRATE',
+            state: {
+              ...createEmptyState(),
+              ...cloudState,
+              isAuthenticated: true,
+              mode: 'real',
+            } as AppState,
+          });
+        }
+      }
+    });
+
+    // 2. Listen to ongoing auth state events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
         if (event === 'SIGNED_OUT') {
+          setCurrentUserId(null);
           dispatch({ type: 'LOGOUT' });
         } else if (event === 'SIGNED_IN' && session) {
-          // Only dispatch LOGIN if not already authenticated (avoids clobbering existing state)
-          dispatch({ type: 'LOGIN', mode: 'real' });
+          const userId = session.user.id;
+          setCurrentUserId(userId);
+
+          // Fast local cache hydration
+          const localCached = loadState(userId);
+          if (localCached.isAuthenticated && localCached.isOnboarded) {
+            dispatch({ type: 'HYDRATE', state: localCached });
+          } else {
+            dispatch({ type: 'LOGIN', mode: 'real' });
+          }
+
+          // Supabase Cloud Database hydration
+          const cloudState = await fetchUserCloudState(userId);
+          if (cloudState && (cloudState.profile || cloudState.isOnboarded)) {
+            dispatch({
+              type: 'HYDRATE',
+              state: {
+                ...createEmptyState(),
+                ...cloudState,
+                isAuthenticated: true,
+                mode: 'real',
+              } as AppState,
+            });
+          }
         }
       })();
     });
+
     return () => { subscription.unsubscribe(); };
   }, []);
 
