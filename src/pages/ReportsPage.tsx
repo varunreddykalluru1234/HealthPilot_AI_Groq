@@ -2,13 +2,13 @@ import { useState, useRef, useCallback } from 'react';
 import {
   FileText, Upload, Trash2, Eye, Sparkles, FileUp, CheckCircle2, AlertCircle,
   Loader2, ClipboardPaste, X, Zap, Pill, Stethoscope, FlaskConical,
-  FileHeart, Syringe, Brain, Plus, Globe, Languages,
+  FileHeart, Syringe, Brain, Plus, Languages,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useRouter } from '@/context/RouterContext';
 import { useToast } from '@/components/Toast';
 import { PageHeader } from '@/components/PageHeader';
-import { Card, CardBody } from '@/components/ui/Card';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -28,7 +28,7 @@ import { analyzeHealthReport } from '@/services/aiService';
 import { analyzeReportWithGroq, isGroqAvailable } from '@/services/groqService';
 import { useLanguage } from '@/context/LanguageContext';
 import { LANGUAGES } from '@/i18n/translations';
-import type { MedicalReport, ReportResult, ExtractedMedicine, ExtractedDiagnosis, DocumentType } from '@/types';
+import type { ReportResult, ExtractedMedicine, ExtractedDiagnosis, DocumentType } from '@/types';
 
 // ─── Document type metadata ────────────────────────────────────────────────────
 
@@ -44,9 +44,9 @@ const DOC_TYPE_META: Record<DocumentType, { label: string; icon: React.ReactNode
 
 export function ReportsPage() {
   const { state, dispatch, isDemo } = useApp();
-  const { navigate, navigateWithParams } = useRouter();
+  const { navigateWithParams } = useRouter();
   const { showToast } = useToast();
-  const { ocrLang, ocrLangCode, setOcrLang, summaryLang, T } = useLanguage();
+  const { ocrLang, ocrLangCode, setOcrLang, summaryLang } = useLanguage();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -66,28 +66,7 @@ export function ReportsPage() {
 
   const reports = [...state.reports].sort((a, b) => new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime());
 
-  const handleFile = useCallback(async (file: File) => {
-    setUploadedFile(file);
-    setProcessing(true);
-    setUploadProgress(0);
-    setProgressLabel('Starting…');
-
-    try {
-      const result = await extractFromFile(file, (pct, label) => {
-        setUploadProgress(pct);
-        setProgressLabel(label);
-      }, ocrLangCode);
-      applyExtractionResult(result);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      showToast(msg, 'error');
-    } finally {
-      setProcessing(false);
-      setProgressLabel('');
-    }
-  }, [showToast, ocrLangCode]);
-
-  function applyExtractionResult(result: ExtractionResult) {
+  const applyExtractionResult = useCallback((result: ExtractionResult) => {
     setExtraction(result);
     setVerifyMeta({ title: result.reportTitle, date: result.reportDate, provider: result.provider });
     setVerifyResults(result.results.map((r) => ({ ...r, userVerified: false })));
@@ -109,7 +88,28 @@ export function ReportsPage() {
     } else {
       showToast(`${DOC_TYPE_META[result.documentType].label} processed. Please verify before saving.`, 'success');
     }
-  }
+  }, [showToast]);
+
+  const handleFile = useCallback(async (file: File) => {
+    setUploadedFile(file);
+    setProcessing(true);
+    setUploadProgress(0);
+    setProgressLabel('Starting…');
+
+    try {
+      const result = await extractFromFile(file, (pct, label) => {
+        setUploadProgress(pct);
+        setProgressLabel(label);
+      }, ocrLangCode);
+      applyExtractionResult(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      showToast(msg, 'error');
+    } finally {
+      setProcessing(false);
+      setProgressLabel('');
+    }
+  }, [showToast, ocrLangCode, applyExtractionResult]);
 
   const handlePaste = async () => {
     if (!pasteText.trim()) { showToast('Please paste some text first.', 'error'); return; }

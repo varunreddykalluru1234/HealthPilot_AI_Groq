@@ -1,17 +1,18 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, type HTMLAttributes } from 'react';
 
-interface CardProps {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   className?: string;
   hover?: boolean;
   onClick?: () => void;
 }
 
-export function Card({ children, className = '', hover, onClick }: CardProps) {
+export function Card({ children, className = '', hover, onClick, ...rest }: CardProps) {
   return (
     <div
       onClick={onClick}
       className={`card ${hover ? 'card-hover' : ''} ${className}`}
+      {...rest}
     >
       {children}
     </div>

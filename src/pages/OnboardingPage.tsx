@@ -38,6 +38,9 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
     gender: '',
     height: '',
     weight: '',
+    bloodPressureSystolic: '',
+    bloodPressureDiastolic: '',
+    heartRate: '',
     bloodGroup: '',
     conditions: '',
     allergies: '',
@@ -90,6 +93,9 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
       gender: data.gender || undefined,
       height: data.height ? parseFloat(data.height) : undefined,
       weight: data.weight ? parseFloat(data.weight) : undefined,
+      bloodPressureSystolic: data.bloodPressureSystolic ? parseInt(data.bloodPressureSystolic) : undefined,
+      bloodPressureDiastolic: data.bloodPressureDiastolic ? parseInt(data.bloodPressureDiastolic) : undefined,
+      heartRate: data.heartRate ? parseInt(data.heartRate) : undefined,
       bloodGroup: data.bloodGroup || undefined,
       conditions: data.conditions ? data.conditions.split(',').map((s) => s.trim()).filter(Boolean) : [],
       allergies: data.allergies ? data.allergies.split(',').map((s) => s.trim()).filter(Boolean) : [],
@@ -113,6 +119,32 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         type: 'weight',
         value: parseFloat(data.weight),
         unit: 'kg',
+        date: ts,
+        source: 'user',
+        sourceLabel: 'Onboarding',
+        createdAt: ts,
+      });
+    }
+    if (data.bloodPressureSystolic) {
+      measurementsToCreate.push({
+        id: uid('meas-'),
+        type: 'blood_pressure',
+        value: parseFloat(data.bloodPressureSystolic),
+        secondaryValue: data.bloodPressureDiastolic ? parseFloat(data.bloodPressureDiastolic) : undefined,
+        unit: 'mmHg',
+        secondaryUnit: 'mmHg',
+        date: ts,
+        source: 'user',
+        sourceLabel: 'Onboarding',
+        createdAt: ts,
+      });
+    }
+    if (data.heartRate) {
+      measurementsToCreate.push({
+        id: uid('meas-'),
+        type: 'heart_rate',
+        value: parseFloat(data.heartRate),
+        unit: 'bpm',
         date: ts,
         source: 'user',
         sourceLabel: 'Onboarding',
@@ -257,18 +289,25 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
                   <Input label="Height (cm)" type="number" placeholder="168" value={data.height} onChange={(e) => update('height', e.target.value)} />
                   <Input label="Weight (kg)" type="number" placeholder="64.5" value={data.weight} onChange={(e) => update('weight', e.target.value)} />
                 </div>
-                <Select
-                  label="Blood group"
-                  value={data.bloodGroup}
-                  onChange={(e) => update('bloodGroup', e.target.value)}
-                  options={[
-                    { value: '', label: 'Select blood group' },
-                    { value: 'A+', label: 'A+' }, { value: 'A-', label: 'A-' },
-                    { value: 'B+', label: 'B+' }, { value: 'B-', label: 'B-' },
-                    { value: 'AB+', label: 'AB+' }, { value: 'AB-', label: 'AB-' },
-                    { value: 'O+', label: 'O+' }, { value: 'O-', label: 'O-' },
-                  ]}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="BP Systolic (mmHg)" type="number" placeholder="120" value={data.bloodPressureSystolic} onChange={(e) => update('bloodPressureSystolic', e.target.value)} />
+                  <Input label="BP Diastolic (mmHg)" type="number" placeholder="80" value={data.bloodPressureDiastolic} onChange={(e) => update('bloodPressureDiastolic', e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Heart rate (bpm)" type="number" placeholder="72" value={data.heartRate} onChange={(e) => update('heartRate', e.target.value)} />
+                  <Select
+                    label="Blood group"
+                    value={data.bloodGroup}
+                    onChange={(e) => update('bloodGroup', e.target.value)}
+                    options={[
+                      { value: '', label: 'Select blood group' },
+                      { value: 'A+', label: 'A+' }, { value: 'A-', label: 'A-' },
+                      { value: 'B+', label: 'B+' }, { value: 'B-', label: 'B-' },
+                      { value: 'AB+', label: 'AB+' }, { value: 'AB-', label: 'AB-' },
+                      { value: 'O+', label: 'O+' }, { value: 'O-', label: 'O-' },
+                    ]}
+                  />
+                </div>
                 <p className="text-xs text-navy-400">All fields are optional. You can update them later in your Health Profile.</p>
               </div>
             )}

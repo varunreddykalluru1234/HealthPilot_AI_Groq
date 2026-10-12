@@ -71,33 +71,69 @@ export async function syncUserCloudState(userId: string, state: AppState): Promi
   if (!isSupabaseConfigured || !supabase) return false;
   if (!userId || state.mode !== 'real') return false;
 
+  // Safety safeguard: Never overwrite populated cloud state with an empty un-onboarded state
+  const hasNoData =
+    !state.isOnboarded &&
+    !state.profile &&
+    (!state.records || state.records.length === 0) &&
+    (!state.measurements || state.measurements.length === 0) &&
+    (!state.reports || state.reports.length === 0);
+
+  if (hasNoData) {
+    return false;
+  }
+
   try {
     const payload = {
       user_id: userId,
-      is_onboarded: state.isOnboarded,
-      profile: state.profile,
-      measurements: state.measurements,
-      records: state.records,
-      reports: state.reports,
-      medications: state.medications,
-      reminders: state.reminders,
-      goals: state.goals,
-      timeline: state.timeline,
-      conversations: state.conversations,
-      abha_connection: state.abhaConnection,
-      imported_abha_record_ids: state.importedAbhaRecordIds,
+      is_onboarded: Boolean(state.isOnboarded),
+      profile: state.profile ?? null,
+      measurements: Array.isArray(state.measurements) ? state.measurements : [],
+      records: Array.isArray(state.records) ? state.records : [],
+      reports: Array.isArray(state.reports) ? state.reports : [],
+      medications: Array.isArray(state.medications) ? state.medications : [],
+      reminders: Array.isArray(state.reminders) ? state.reminders : [],
+      goals: Array.isArray(state.goals) ? state.goals : [],
+      timeline: Array.isArray(state.timeline) ? state.timeline : [],
+      conversations: Array.isArray(state.conversations) ? state.conversations : [],
+      abha_connection: state.abhaConnection ?? { isConnected: false, consentGiven: false },
+      imported_abha_record_ids: Array.isArray(state.importedAbhaRecordIds) ? state.importedAbhaRecordIds : [],
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('user_health_state')
       .upsert(payload, { onConflict: 'user_id' });
 
+    // Fallback if upsert encounters RLS conflict or syntax differences: try select -> update or insert
     if (error) {
-      console.warn('[Supabase Storage] Cloud save error:', error.message);
+      console.warn('[Supabase Storage] Upsert warning, trying fallback update/insert:', error.message);
+      const { data: existing } = await supabase
+        .from('user_health_state')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existing) {
+        const updateRes = await supabase
+          .from('user_health_state')
+          .update(payload)
+          .eq('user_id', userId);
+        error = updateRes.error;
+      } else {
+        const insertRes = await supabase
+          .from('user_health_state')
+          .insert(payload);
+        error = insertRes.error;
+      }
+    }
+
+    if (error) {
+      console.error('[Supabase Storage] Cloud save error:', error.message, error);
       return false;
     }
 
+    console.log('[Supabase Storage] Successfully synced health state to cloud for user:', userId);
     return true;
   } catch (err) {
     console.warn('[Supabase Storage] Unexpected save exception:', err);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { UserCircle, User, Heart, Pill, Moon, Target, Edit2, Save, X, Sparkles, Plus, FileHeart, Building2, ExternalLink, ShieldCheck, Camera } from 'lucide-react';
+import { UserCircle, User, Heart, Pill, Moon, Target, Edit2, Save, X, Sparkles, Plus, FileHeart, ExternalLink, ShieldCheck, Camera } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useRouter } from '@/context/RouterContext';
 import { useToast } from '@/components/Toast';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { UserAvatar } from '@/components/ui/UserAvatar';
-import { nowISO } from '@/utils/helpers';
+import { nowISO, uid } from '@/utils/helpers';
 
 export function ProfilePage() {
   const { state, dispatch, isDemo } = useApp();
@@ -37,6 +37,73 @@ export function ProfilePage() {
   const handleSave = () => {
     if (!form) return;
     dispatch({ type: 'UPDATE_PROFILE', profile: { ...form, updatedAt: nowISO() } });
+
+    // Automatically sync updated vitals as measurements for Dashboard tracking
+    const ts = nowISO();
+    if (form.weight !== undefined && form.weight !== profile.weight) {
+      dispatch({
+        type: 'ADD_MEASUREMENT',
+        measurement: {
+          id: uid('meas-'),
+          type: 'weight',
+          value: form.weight,
+          unit: 'kg',
+          date: ts,
+          source: 'user',
+          sourceLabel: 'Health Profile',
+          createdAt: ts,
+        },
+      });
+    }
+    if ((form.bloodPressureSystolic !== undefined || form.bloodPressureDiastolic !== undefined) &&
+        (form.bloodPressureSystolic !== profile.bloodPressureSystolic || form.bloodPressureDiastolic !== profile.bloodPressureDiastolic)) {
+      dispatch({
+        type: 'ADD_MEASUREMENT',
+        measurement: {
+          id: uid('meas-'),
+          type: 'blood_pressure',
+          value: form.bloodPressureSystolic || 120,
+          secondaryValue: form.bloodPressureDiastolic || 80,
+          unit: 'mmHg',
+          secondaryUnit: 'mmHg',
+          date: ts,
+          source: 'user',
+          sourceLabel: 'Health Profile',
+          createdAt: ts,
+        },
+      });
+    }
+    if (form.heartRate !== undefined && form.heartRate !== profile.heartRate) {
+      dispatch({
+        type: 'ADD_MEASUREMENT',
+        measurement: {
+          id: uid('meas-'),
+          type: 'heart_rate',
+          value: form.heartRate,
+          unit: 'bpm',
+          date: ts,
+          source: 'user',
+          sourceLabel: 'Health Profile',
+          createdAt: ts,
+        },
+      });
+    }
+    if (form.sleepHours !== undefined && form.sleepHours !== profile.sleepHours) {
+      dispatch({
+        type: 'ADD_MEASUREMENT',
+        measurement: {
+          id: uid('meas-'),
+          type: 'sleep',
+          value: form.sleepHours,
+          unit: 'hours',
+          date: ts,
+          source: 'user',
+          sourceLabel: 'Health Profile',
+          createdAt: ts,
+        },
+      });
+    }
+
     setEditing(false);
     showToast('Health profile updated successfully.', 'success');
   };
@@ -48,13 +115,13 @@ export function ProfilePage() {
 
   const update = (key: string, value: string | number | string[] | undefined) => setForm((prev) => prev ? { ...prev, [key]: value } : prev);
 
-  const addListItem = (key: 'conditions' | 'allergies' | 'medications' | 'familyHistory', value: string) => {
+  const addListItem = (key: 'conditions' | 'allergies' | 'medications' | 'familyHistory' | 'goals', value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return;
     setForm((prev) => prev && !prev[key].includes(trimmed) ? { ...prev, [key]: [...prev[key], trimmed] } : prev);
   };
 
-  const removeListItem = (key: 'conditions' | 'allergies' | 'medications' | 'familyHistory', value: string) => {
+  const removeListItem = (key: 'conditions' | 'allergies' | 'medications' | 'familyHistory' | 'goals', value: string) => {
     setForm((prev) => prev ? { ...prev, [key]: prev[key].filter((v) => v !== value) } : prev);
   };
 
@@ -212,7 +279,36 @@ export function ProfilePage() {
           {editing && form ? (
             <div className="grid sm:grid-cols-2 gap-4">
               <Input label="Full name" value={form.fullName} onChange={(e) => update('fullName', e.target.value)} />
-              <Input label="Date of birth" type="date" value={form.dateOfBirth ?? ''} onChange={(e) => update('dateOfBirth', e.target.value)} />
+              <Input
+                label="Age (years)"
+                type="number"
+                value={form.age?.toString() ?? ''}
+                onChange={(e) => update('age', e.target.value ? parseInt(e.target.value) : undefined)}
+                placeholder="e.g. 34"
+              />
+              <Input
+                label="Date of birth"
+                type="date"
+                value={form.dateOfBirth ?? ''}
+                onChange={(e) => {
+                  const dob = e.target.value;
+                  update('dateOfBirth', dob);
+                  if (dob) {
+                    const birth = new Date(dob);
+                    if (!isNaN(birth.getTime())) {
+                      const today = new Date();
+                      let age = today.getFullYear() - birth.getFullYear();
+                      const m = today.getMonth() - birth.getMonth();
+                      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+                        age--;
+                      }
+                      if (age >= 0 && age < 130) {
+                        update('age', age);
+                      }
+                    }
+                  }
+                }}
+              />
               <Select label="Gender" value={form.gender ?? ''} onChange={(e) => update('gender', e.target.value)}
                 options={[{ value: '', label: 'Prefer not to say' }, { value: 'Female', label: 'Female' }, { value: 'Male', label: 'Male' }, { value: 'Non-binary', label: 'Non-binary' }, { value: 'Other', label: 'Other' }]} />
               <Input label="Email" value={form.email} onChange={(e) => update('email', e.target.value)} />
@@ -344,12 +440,20 @@ export function ProfilePage() {
       <Card>
         <CardHeader title="Health Goals" icon={<Target className="w-5 h-5" />} />
         <CardBody>
-          {profile.goals.length > 0 ? (
+          {editing && form ? (
+            <ChipInput
+              label="Active Health Goals"
+              items={form.goals}
+              onAdd={(v) => addListItem('goals', v)}
+              onRemove={(v) => removeListItem('goals', v)}
+              placeholder="e.g., Improve sleep, Track blood pressure, Daily 8k steps"
+            />
+          ) : profile.goals.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {profile.goals.map((g, i) => <Badge key={i} variant="teal">{g}</Badge>)}
             </div>
           ) : (
-            <p className="text-sm text-navy-300">No goals set yet. Visit the Health Goals page to create your first goal.</p>
+            <p className="text-sm text-navy-300">No goals set yet. Visit the Health Goals page or click Edit Profile to add your health goals.</p>
           )}
         </CardBody>
       </Card>

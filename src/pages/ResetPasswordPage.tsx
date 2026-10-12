@@ -21,27 +21,64 @@ export function ResetPasswordPage({ onBack }: ResetPasswordPageProps) {
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) {
+    const client = supabase;
+    if (!isSupabaseConfigured || !client) {
       setCheckingSession(false);
       return;
     }
 
-    // When the user clicks the reset link in the email, Supabase redirects
-    // here with a recovery session. getSession confirms the session is valid.
-    (async () => {
-      try {
-        const { data, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !data.session) {
-          setSessionReady(false);
-        } else {
-          setSessionReady(true);
-        }
-      } catch {
-        setSessionReady(false);
-      } finally {
+    const hash = window.location.hash;
+    const search = window.location.search;
+    const hasRecoveryTokens =
+      hash.includes('type=recovery') ||
+      hash.includes('access_token') ||
+      search.includes('code=') ||
+      search.includes('type=recovery') ||
+      search.includes('reset=true');
+
+    // 1. Listen for Supabase recovery auth state change
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || (session && (event === 'SIGNED_IN' || event === 'USER_UPDATED'))) {
+        setSessionReady(true);
         setCheckingSession(false);
       }
-    })();
+    });
+
+    // 2. Poll/check session with retries to allow async URL token exchange
+    let attempts = 0;
+    let isCancelled = false;
+
+    const verifySession = async () => {
+      try {
+        const { data } = await client.auth.getSession();
+        if (data?.session) {
+          if (!isCancelled) {
+            setSessionReady(true);
+            setCheckingSession(false);
+          }
+          return;
+        }
+      } catch {
+        // ignore and retry if tokens are present
+      }
+
+      attempts++;
+      if (attempts < 6 && hasRecoveryTokens && !isCancelled) {
+        setTimeout(verifySession, 500);
+      } else if (!isCancelled) {
+        // Final check: if user already has an active session
+        const { data } = await client.auth.getSession();
+        setSessionReady(Boolean(data?.session));
+        setCheckingSession(false);
+      }
+    };
+
+    verifySession();
+
+    return () => {
+      isCancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const validate = (): boolean => {

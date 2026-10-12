@@ -3,13 +3,13 @@ import { BellRing, Plus, Edit2, Trash2, Check, Clock, Calendar, Pill, Stethoscop
 import { useApp } from '@/context/AppContext';
 import { useToast } from '@/components/Toast';
 import { PageHeader } from '@/components/PageHeader';
-import { Card, CardBody } from '@/components/ui/Card';
+import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatDate, relativeDate, uid, nowISO, todayISO } from '@/utils/helpers';
+import { formatDate, uid, nowISO, todayISO } from '@/utils/helpers';
 import type { Reminder, ReminderType } from '@/types';
 
 const typeConfig: Record<ReminderType, { icon: typeof Pill; color: string; bg: string }> = {

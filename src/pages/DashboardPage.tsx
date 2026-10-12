@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   TrendingDown, TrendingUp, Minus, Calendar, FileText, Pill, Target, MessageSquare,
   Brain, Sparkles, AlertCircle, Activity, Plus, BellRing, FileHeart, ArrowRight,
-  ShieldCheck, Heart, Moon, Flame, Scale, CheckCircle2, ChevronRight,
+  ShieldCheck, Heart, Moon, Flame, Scale, CheckCircle2, ChevronRight, Edit2, User, Droplets,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useRouter } from '@/context/RouterContext';
@@ -82,18 +82,75 @@ export function DashboardPage() {
     goals: state.goals,
     isDemo,
   }), [state.profile, state.measurements, state.reports, state.medications, state.reminders, state.goals, isDemo]);
-
   const latestByType = (type: string): HealthMeasurement | null => {
     const items = state.measurements
       .filter((m) => m.type === type)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    return items[0] ?? null;
+    if (items.length > 0) return items[0];
+
+    // Fall back to vitals saved on UserProfile
+    const profile = state.profile;
+    if (!profile) return null;
+    const date = profile.updatedAt || profile.createdAt || new Date().toISOString();
+
+    if (type === 'weight' && profile.weight) {
+      return {
+        id: 'prof-meas-weight',
+        type: 'weight',
+        value: profile.weight,
+        unit: 'kg',
+        date,
+        source: 'user',
+        sourceLabel: 'Health Profile',
+        createdAt: date,
+      };
+    }
+    if (type === 'blood_pressure' && (profile.bloodPressureSystolic || profile.bloodPressureDiastolic)) {
+      return {
+        id: 'prof-meas-bp',
+        type: 'blood_pressure',
+        value: profile.bloodPressureSystolic ?? 120,
+        secondaryValue: profile.bloodPressureDiastolic ?? 80,
+        unit: 'mmHg',
+        secondaryUnit: 'mmHg',
+        date,
+        source: 'user',
+        sourceLabel: 'Health Profile',
+        createdAt: date,
+      };
+    }
+    if (type === 'heart_rate' && profile.heartRate) {
+      return {
+        id: 'prof-meas-hr',
+        type: 'heart_rate',
+        value: profile.heartRate,
+        unit: 'bpm',
+        date,
+        source: 'user',
+        sourceLabel: 'Health Profile',
+        createdAt: date,
+      };
+    }
+    if (type === 'sleep' && profile.sleepHours) {
+      return {
+        id: 'prof-meas-sleep',
+        type: 'sleep',
+        value: profile.sleepHours,
+        unit: 'hours',
+        date,
+        source: 'user',
+        sourceLabel: 'Health Profile',
+        createdAt: date,
+      };
+    }
+
+    return null;
   };
 
   const getTrend = (type: string): { direction: 'up' | 'down' | 'flat'; value: string } | null => {
     const items = state.measurements
       .filter((m) => m.type === type)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     if (items.length < 2) return null;
     const first = items[0].value;
     const last = items[items.length - 1].value;
@@ -102,13 +159,116 @@ export function DashboardPage() {
     return { direction: diff > 0 ? 'up' : 'down', value: `${Math.abs(diff).toFixed(1)}` };
   };
 
-  const overviewCards = [
-    { type: 'weight', label: 'Weight', icon: Scale, color: 'text-teal-600 bg-teal-50', getValue: (m: HealthMeasurement) => `${m.value} ${m.unit}` },
-    { type: 'blood_pressure', label: 'Blood Pressure', icon: Heart, color: 'text-rose-600 bg-rose-50', getValue: (m: HealthMeasurement) => `${m.value}/${m.secondaryValue} ${m.unit}` },
-    { type: 'heart_rate', label: 'Heart Rate', icon: Activity, color: 'text-amber-600 bg-amber-50', getValue: (m: HealthMeasurement) => `${m.value} ${m.unit}` },
-    { type: 'sleep', label: 'Sleep', icon: Moon, color: 'text-indigo-600 bg-indigo-50', getValue: (m: HealthMeasurement) => `${m.value} ${m.unit}` },
-    { type: 'activity', label: 'Daily Activity', icon: Flame, color: 'text-orange-600 bg-orange-50', getValue: (m: HealthMeasurement) => `${m.value.toLocaleString()} ${m.unit}` },
-  ];
+  // Compute BMI dynamically if height & weight exist in profile
+  const bmiInfo = useMemo(() => {
+    if (!state.profile?.height || !state.profile?.weight) return null;
+    const hM = state.profile.height / 100;
+    const bmiVal = parseFloat((state.profile.weight / (hM * hM)).toFixed(1));
+    let category = 'Normal weight';
+    if (bmiVal < 18.5) category = 'Underweight';
+    else if (bmiVal >= 25 && bmiVal < 30) category = 'Overweight';
+    else if (bmiVal >= 30) category = 'Obesity';
+    return { value: `${bmiVal} kg/m²`, category };
+  }, [state.profile?.height, state.profile?.weight]);
+
+  const vitalCards = useMemo(() => {
+    const prof = state.profile;
+    const latestBP = latestByType('blood_pressure');
+    const latestHR = latestByType('heart_rate');
+    const latestWeight = latestByType('weight');
+    const latestSleep = latestByType('sleep');
+
+    const bpVal = prof?.bloodPressureSystolic && prof?.bloodPressureDiastolic
+      ? `${prof.bloodPressureSystolic}/${prof.bloodPressureDiastolic} mmHg`
+      : latestBP?.secondaryValue
+      ? `${latestBP.value}/${latestBP.secondaryValue} mmHg`
+      : null;
+
+    const hrVal = prof?.heartRate
+      ? `${prof.heartRate} bpm`
+      : latestHR?.value
+      ? `${latestHR.value} bpm`
+      : null;
+
+    const weightVal = prof?.weight
+      ? `${prof.weight} kg`
+      : latestWeight?.value
+      ? `${latestWeight.value} kg`
+      : null;
+
+    const sleepVal = prof?.sleepHours
+      ? `${prof.sleepHours} hrs/night`
+      : latestSleep?.value
+      ? `${latestSleep.value} hrs`
+      : null;
+
+    return [
+      {
+        id: 'blood_pressure',
+        label: 'Blood Pressure',
+        icon: Heart,
+        color: 'text-rose-600 bg-rose-50',
+        value: bpVal,
+        subtext: 'Systolic / Diastolic',
+      },
+      {
+        id: 'heart_rate',
+        label: 'Heart Rate',
+        icon: Activity,
+        color: 'text-amber-600 bg-amber-50',
+        value: hrVal,
+        subtext: 'Resting pulse',
+      },
+      {
+        id: 'weight',
+        label: 'Weight',
+        icon: Scale,
+        color: 'text-teal-600 bg-teal-50',
+        value: weightVal,
+        subtext: 'Body weight',
+      },
+      {
+        id: 'height',
+        label: 'Height',
+        icon: User,
+        color: 'text-blue-600 bg-blue-50',
+        value: prof?.height ? `${prof.height} cm` : null,
+        subtext: 'Body stature',
+      },
+      {
+        id: 'bmi',
+        label: 'BMI Index',
+        icon: Sparkles,
+        color: 'text-emerald-600 bg-emerald-50',
+        value: bmiInfo?.value || null,
+        subtext: bmiInfo?.category || 'Body Mass Index',
+      },
+      {
+        id: 'blood_group',
+        label: 'Blood Group',
+        icon: Heart,
+        color: 'text-rose-600 bg-rose-50',
+        value: prof?.bloodGroup || null,
+        subtext: 'ABO / Rh typing',
+      },
+      {
+        id: 'sleep',
+        label: 'Sleep Duration',
+        icon: Moon,
+        color: 'text-indigo-600 bg-indigo-50',
+        value: sleepVal,
+        subtext: 'Target nightly rest',
+      },
+      {
+        id: 'water',
+        label: 'Hydration',
+        icon: Droplets,
+        color: 'text-cyan-600 bg-cyan-50',
+        value: prof?.waterIntake ? `${prof.waterIntake} glasses/day` : null,
+        subtext: 'Daily hydration goal',
+      },
+    ];
+  }, [state.profile, state.measurements, bmiInfo]);
 
   const pendingReminders = state.reminders.filter((r) => !r.completed).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const todayReminders = pendingReminders.filter((r) => r.date.split('T')[0] === new Date().toISOString().split('T')[0]);
@@ -116,20 +276,45 @@ export function DashboardPage() {
 
   const recentRecords = [...state.records].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 4);
 
-  const weightData = state.measurements
-    .filter((m) => m.type === 'weight')
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .map((m) => ({ date: formatDate(m.date, { month: 'short', day: 'numeric' }), value: m.value }));
+  const weightData = useMemo(() => {
+    const list = state.measurements.filter((m) => m.type === 'weight');
+    if (list.length === 0 && state.profile?.weight) {
+      return [{
+        date: formatDate(state.profile.updatedAt || new Date().toISOString(), { month: 'short', day: 'numeric' }),
+        value: state.profile.weight,
+      }];
+    }
+    return list
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map((m) => ({ date: formatDate(m.date, { month: 'short', day: 'numeric' }), value: m.value }));
+  }, [state.measurements, state.profile?.weight, state.profile?.updatedAt]);
 
-  const bpData = state.measurements
-    .filter((m) => m.type === 'blood_pressure')
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .map((m) => ({ date: formatDate(m.date, { month: 'short', day: 'numeric' }), systolic: m.value, diastolic: m.secondaryValue }));
+  const bpData = useMemo(() => {
+    const list = state.measurements.filter((m) => m.type === 'blood_pressure');
+    if (list.length === 0 && (state.profile?.bloodPressureSystolic || state.profile?.bloodPressureDiastolic)) {
+      return [{
+        date: formatDate(state.profile.updatedAt || new Date().toISOString(), { month: 'short', day: 'numeric' }),
+        systolic: state.profile.bloodPressureSystolic ?? 120,
+        diastolic: state.profile.bloodPressureDiastolic ?? 80,
+      }];
+    }
+    return list
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map((m) => ({ date: formatDate(m.date, { month: 'short', day: 'numeric' }), systolic: m.value, diastolic: m.secondaryValue }));
+  }, [state.measurements, state.profile?.bloodPressureSystolic, state.profile?.bloodPressureDiastolic, state.profile?.updatedAt]);
 
-  const sleepData = state.measurements
-    .filter((m) => m.type === 'sleep')
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .map((m) => ({ date: formatDate(m.date, { month: 'short', day: 'numeric' }), value: m.value }));
+  const sleepData = useMemo(() => {
+    const list = state.measurements.filter((m) => m.type === 'sleep');
+    if (list.length === 0 && state.profile?.sleepHours) {
+      return [{
+        date: formatDate(state.profile.updatedAt || new Date().toISOString(), { month: 'short', day: 'numeric' }),
+        value: state.profile.sleepHours,
+      }];
+    }
+    return list
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map((m) => ({ date: formatDate(m.date, { month: 'short', day: 'numeric' }), value: m.value }));
+  }, [state.measurements, state.profile?.sleepHours, state.profile?.updatedAt]);
 
   const activityData = state.measurements
     .filter((m) => m.type === 'activity')
@@ -176,16 +361,58 @@ export function DashboardPage() {
               )}
             </div>
             <p className="text-xs sm:text-sm text-navy-500 font-medium">Real-time biometric monitoring & clinical copilot intelligence</p>
+
+            {/* Quick Profile Vitals Pills */}
+            {state.profile && (
+              <div className="flex flex-wrap items-center gap-2 pt-2.5">
+                {state.profile.age && (
+                  <span className="px-2.5 py-0.5 rounded-xl bg-slate-100 border border-slate-200/80 text-[11px] font-semibold text-navy-700 shadow-2xs">
+                    {state.profile.age} Yrs
+                  </span>
+                )}
+                {state.profile.gender && (
+                  <span className="px-2.5 py-0.5 rounded-xl bg-slate-100 border border-slate-200/80 text-[11px] font-semibold text-navy-700 shadow-2xs">
+                    {state.profile.gender}
+                  </span>
+                )}
+                {state.profile.bloodGroup && (
+                  <span className="px-2.5 py-0.5 rounded-xl bg-rose-50 border border-rose-200/80 text-[11px] font-bold text-rose-700 shadow-2xs">
+                    Blood: {state.profile.bloodGroup}
+                  </span>
+                )}
+                {state.profile.height && (
+                  <span className="px-2.5 py-0.5 rounded-xl bg-slate-100 border border-slate-200/80 text-[11px] font-semibold text-navy-700 shadow-2xs">
+                    {state.profile.height} cm
+                  </span>
+                )}
+                {state.profile.weight && (
+                  <span className="px-2.5 py-0.5 rounded-xl bg-teal-50 border border-teal-200/80 text-[11px] font-bold text-teal-800 shadow-2xs">
+                    {state.profile.weight} kg
+                  </span>
+                )}
+                {state.profile.bloodPressureSystolic && state.profile.bloodPressureDiastolic && (
+                  <span className="px-2.5 py-0.5 rounded-xl bg-rose-50 border border-rose-200/80 text-[11px] font-bold text-rose-700 shadow-2xs">
+                    BP: {state.profile.bloodPressureSystolic}/{state.profile.bloodPressureDiastolic}
+                  </span>
+                )}
+                {state.profile.heartRate && (
+                  <span className="px-2.5 py-0.5 rounded-xl bg-amber-50 border border-amber-200/80 text-[11px] font-bold text-amber-700 shadow-2xs">
+                    HR: {state.profile.heartRate} bpm
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         <Button
           size="sm"
-          leftIcon={<Plus className="w-4 h-4" />}
-          onClick={() => setMeasModalOpen(true)}
+          variant="outline"
+          leftIcon={<Edit2 className="w-4 h-4" />}
+          onClick={() => navigate('profile')}
           className="self-start sm:self-auto cursor-pointer"
         >
-          Record Measurement
+          Edit Vitals in Profile
         </Button>
       </div>
 
@@ -258,56 +485,93 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      {/* Overview Metric Cards */}
+      {/* Overview Metric Cards - Synchronized automatically with Health Profile */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-heading font-bold text-navy-900 text-base">Key Biometric Vitals</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="font-heading font-bold text-navy-950 text-base">Key Biometric Vitals</h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                Synced from Health Profile
+              </span>
+            </div>
+            <p className="text-xs text-navy-400 mt-0.5">Real-time health statistics updated automatically from your profile</p>
+          </div>
+          <button
+            onClick={() => navigate('profile')}
+            className="text-xs font-semibold text-teal-700 hover:text-teal-800 flex items-center gap-1 cursor-pointer self-start sm:self-auto hover:underline"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+            Manage all vitals in Profile
+          </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {overviewCards.map((card) => {
-            const latest = latestByType(card.type);
-            const trend = getTrend(card.type);
-            return (
-              <Card key={card.type} hover className="p-4 rounded-2xl border border-slate-200/80 hover:border-teal-300 hover:shadow-card-hover transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-navy-400 uppercase tracking-wider">{card.label}</p>
-                  <div className={`w-7 h-7 rounded-lg ${card.color} flex items-center justify-center`}>
-                    <card.icon className="w-3.5 h-3.5" />
-                  </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {vitalCards.map((card) => (
+            <Card
+              key={card.id}
+              hover
+              onClick={() => navigate('profile')}
+              className="p-4 rounded-2xl border border-slate-200/80 hover:border-teal-300 hover:shadow-card-hover transition-all cursor-pointer group"
+              title={`Click to edit ${card.label} in Health Profile`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-navy-500 uppercase tracking-wider">{card.label}</p>
+                <div className={`w-7 h-7 rounded-lg ${card.color} flex items-center justify-center group-hover:scale-105 transition-transform`}>
+                  <card.icon className="w-3.5 h-3.5" />
                 </div>
-                {latest ? (
-                  <>
-                    <p className="font-heading font-bold text-navy-950 text-lg leading-tight">{card.getValue(latest)}</p>
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <span className="text-[11px] text-navy-400">{formatDate(latest.date, { month: 'short', day: 'numeric' })}</span>
-                      {trend && (
-                        <span className="flex items-center gap-0.5 text-[11px] font-medium text-navy-500 ml-auto">
-                          <TrendIcon direction={trend.direction} />
-                          {trend.value}
-                        </span>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-xs text-navy-300 mt-2">No data yet</p>
-                )}
-              </Card>
-            );
-          })}
-          <Card hover className="p-4 rounded-2xl border border-slate-200/80 hover:border-teal-300 hover:shadow-card-hover transition-all">
+              </div>
+              {card.value ? (
+                <>
+                  <p className="font-heading font-extrabold text-navy-950 text-lg leading-tight tracking-tight">
+                    {card.value}
+                  </p>
+                  <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-50">
+                    <span className="text-[11px] text-navy-500 font-medium truncate">{card.subtext}</span>
+                    <span className="text-[10px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded font-semibold border border-teal-100">
+                      Profile
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <p className="text-xs text-navy-300 mt-1">Not set in profile</p>
+                  <p className="text-[11px] text-teal-600 font-medium mt-2 group-hover:underline flex items-center gap-1">
+                    Set in Profile →
+                  </p>
+                </div>
+              )}
+            </Card>
+          ))}
+          <Card
+            hover
+            onClick={() => navigate('medications')}
+            className="p-4 rounded-2xl border border-slate-200/80 hover:border-teal-300 hover:shadow-card-hover transition-all cursor-pointer group"
+            title="Manage Medications"
+          >
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-navy-400 uppercase tracking-wider">Adherence</p>
-              <div className="w-7 h-7 rounded-lg text-emerald-600 bg-emerald-50 flex items-center justify-center">
+              <p className="text-xs font-semibold text-navy-500 uppercase tracking-wider">Adherence</p>
+              <div className="w-7 h-7 rounded-lg text-emerald-600 bg-emerald-50 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <Pill className="w-3.5 h-3.5" />
               </div>
             </div>
             {medAdherence !== null ? (
               <>
-                <p className="font-heading font-bold text-navy-950 text-lg leading-tight">{medAdherence}%</p>
-                <p className="text-[11px] text-emerald-600 font-medium mt-1.5">{state.medications.length} active med(s)</p>
+                <p className="font-heading font-extrabold text-navy-950 text-lg leading-tight tracking-tight">{medAdherence}%</p>
+                <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-50">
+                  <span className="text-[11px] text-emerald-600 font-medium">{state.medications.length} active med(s)</span>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-semibold border border-emerald-100">
+                    Active
+                  </span>
+                </div>
               </>
             ) : (
-              <p className="text-xs text-navy-300 mt-2">No medications</p>
+              <div>
+                <p className="text-xs text-navy-300 mt-1">No medications</p>
+                <p className="text-[11px] text-teal-600 font-medium mt-2 group-hover:underline flex items-center gap-1">
+                  Add Meds →
+                </p>
+              </div>
             )}
           </Card>
         </div>

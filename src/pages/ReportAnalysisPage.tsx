@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDate, statusColor } from '@/utils/helpers';
 import { explainResult } from '@/services/aiService';
-import type { ReportResult, DocumentType } from '@/types';
+import type { DocumentType } from '@/types';
 
 const DOC_TYPE_LABELS: Record<DocumentType, string> = {
   lab_report:         'Lab Report',
@@ -56,7 +56,6 @@ export function ReportAnalysisPage() {
   const explanation = selectedResult ? explainResult(selectedResult) : null;
   const outsideCount = report.results.filter((r) => r.status === 'outside_range').length;
   const withinCount = report.results.filter((r) => r.status === 'within_range').length;
-  const reviewCount = report.results.filter((r) => r.status === 'review_recommended').length;
   const docType = report.documentType ?? 'unknown';
   const docLabel = DOC_TYPE_LABELS[docType];
 

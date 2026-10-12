@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Activity, Mail, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles, AlertCircle, MailCheck } from 'lucide-react';
+import { Activity, Mail, Lock, User, Eye, EyeOff, ArrowLeft, Sparkles, AlertCircle, MailCheck, Info } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-
 
 interface AuthPageProps {
   onSuccess: () => void;
@@ -13,7 +12,7 @@ interface AuthPageProps {
 }
 
 export function AuthPage({ onSuccess, onBack }: AuthPageProps) {
-  const { dispatch } = useApp();
+  const { dispatch, hydrateUser } = useApp();
   const { showToast } = useToast();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [view, setView] = useState<'auth' | 'forgot'>('auth');
@@ -55,7 +54,10 @@ export function AuthPage({ onSuccess, onBack }: AuthPageProps) {
         const { data, error } = await supabase.auth.signUp({
           email: form.email,
           password: form.password,
-          options: { data: { full_name: form.fullName } },
+          options: {
+            data: { full_name: form.fullName },
+            emailRedirectTo: `${window.location.origin}/?confirmed=true`,
+          },
         });
         if (error) throw error;
         if (data.user && !data.session) {
@@ -64,16 +66,31 @@ export function AuthPage({ onSuccess, onBack }: AuthPageProps) {
           setLoading(false);
           return;
         }
-        dispatch({ type: 'LOGIN', mode: 'real' });
+        if (data.user?.id) {
+          await hydrateUser(data.user.id);
+        } else {
+          dispatch({ type: 'LOGIN', mode: 'real' });
+        }
         showToast('Account created! Let\'s set up your health profile.', 'success');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: form.email,
           password: form.password,
         });
         if (error) throw error;
-        dispatch({ type: 'LOGIN', mode: 'real' });
-        showToast('Welcome back!', 'success');
+
+        // Fully hydrate user cloud data before navigating to app view
+        if (data?.user?.id) {
+          const hasCloudData = await hydrateUser(data.user.id);
+          if (hasCloudData) {
+            showToast('Welcome back! Your health data has been synced.', 'success');
+          } else {
+            showToast('Welcome back!', 'success');
+          }
+        } else {
+          dispatch({ type: 'LOGIN', mode: 'real' });
+          showToast('Welcome back!', 'success');
+        }
       }
       setLoading(false);
       onSuccess();
@@ -200,9 +217,15 @@ export function AuthPage({ onSuccess, onBack }: AuthPageProps) {
                     <div>
                       <p className="text-sm font-medium text-teal-800 mb-1">Check your email</p>
                       <p className="text-sm text-teal-700 leading-relaxed">
-                        If an account exists for <span className="font-medium">{resetEmail}</span>, a password reset link has been sent. Check your inbox (and spam folder) and follow the link to set a new password.
+                        If an account exists for <span className="font-medium">{resetEmail}</span>, a password reset link has been sent. Check your inbox (and spam folder) and click the link to set a new password.
                       </p>
                     </div>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
+                    <Info className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      <strong>Important:</strong> If the link in your email opens <code className="bg-slate-200 px-1 py-0.5 rounded text-[11px]">localhost:5173</code> with a connection error, make sure your Supabase project's <strong>Site URL</strong> and <strong>Redirect URLs</strong> in Authentication settings match your current website address.
+                    </p>
                   </div>
                   <Button fullWidth size="lg" onClick={() => { setView('auth'); setResetSent(false); setResetEmail(''); }}>
                     Back to sign in

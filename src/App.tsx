@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Activity } from 'lucide-react';
 import { AppProvider, useApp } from '@/context/AppContext';
 import { RouterProvider, useRouter } from '@/context/RouterContext';
-import { ToastProvider } from '@/components/Toast';
+import { ToastProvider, useToast } from '@/components/Toast';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LandingPage } from '@/pages/LandingPage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
@@ -23,12 +24,14 @@ import { PrivacyPage } from '@/pages/PrivacyPage';
 import { AuthPage } from '@/pages/AuthPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { supabase } from '@/lib/supabase';
 
 type AppView = 'landing' | 'auth' | 'onboarding' | 'app' | 'reset';
 
 function AppContent() {
-  const { state } = useApp();
+  const { state, isLoading } = useApp();
   const { page, navigate } = useRouter();
+  const { showToast } = useToast();
   const [view, setView] = useState<AppView>(() => {
     try {
       const lastUser = localStorage.getItem('healthpilot_last_user_id');
@@ -48,14 +51,34 @@ function AppContent() {
   useEffect(() => {
     if (state.isAuthenticated && view === 'landing') {
       setView('app');
+    } else if (!state.isAuthenticated && view === 'app') {
+      setView('landing');
     }
-  }, [state.isAuthenticated]);
+  }, [state.isAuthenticated, view]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('reset') === 'true') {
+    const hash = window.location.hash;
+
+    if (params.get('reset') === 'true' || hash.includes('type=recovery') || hash.includes('recovery')) {
       setView('reset');
+      return;
     }
+
+    if (params.get('confirmed') === 'true' || hash.includes('type=signup') || hash.includes('type=email_change')) {
+      showToast('Email verified successfully! Welcome to HealthPilot AI.', 'success');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setView('reset');
+      }
+    });
+    return () => { subscription.unsubscribe(); };
   }, []);
 
   if (view === 'reset') {
@@ -84,6 +107,20 @@ function AppContent() {
         }}
         onGoToApp={() => setView('app')}
       />
+    );
+  }
+
+  if (view === 'app' && isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+        <div className="w-12 h-12 rounded-2xl bg-teal-600 flex items-center justify-center shadow-lg shadow-teal-600/20 animate-pulse">
+          <Activity className="w-6 h-6 text-white" />
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-navy-800">Loading your health data...</p>
+          <p className="text-xs text-navy-400 mt-1">HealthPilot AI is syncing your health records</p>
+        </div>
+      </div>
     );
   }
 

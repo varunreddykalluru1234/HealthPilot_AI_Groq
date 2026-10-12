@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, User, Bell, Shield, Brain, Database, Trash2, Download, LogOut, AlertTriangle, Sparkles, Globe, FileHeart, Code2 } from 'lucide-react';
+import { Settings as SettingsIcon, User, Bell, Shield, Brain, Database, Trash2, Download, LogOut, AlertTriangle, Sparkles, Globe, FileHeart, Code2, RefreshCw } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useRouter } from '@/context/RouterContext';
 import { useToast } from '@/components/Toast';
@@ -15,12 +15,13 @@ import { LANGUAGES } from '@/i18n/translations';
 import { generateFhirBundle, downloadFhirBundle } from '@/services/fhirService';
 
 export function SettingsPage() {
-  const { state, dispatch, isDemo } = useApp();
+  const { state, dispatch, isDemo, syncCloud, hydrateUser, currentUserId } = useApp();
   const { navigate } = useRouter();
   const { showToast } = useToast();
   const { uiLang, summaryLang, ocrLang, setUiLang, setSummaryLang, setOcrLang, T } = useLanguage();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const loadPrefs = <T,>(key: string, fallback: T): T => {
     try {
@@ -292,6 +293,40 @@ export function SettingsPage() {
       <Card>
         <CardHeader title="Data Management" icon={<Database className="w-5 h-5" />} />
         <CardBody className="space-y-3">
+          <div className="flex items-center justify-between p-3.5 bg-teal-50/70 border border-teal-100/90 rounded-xl">
+            <div>
+              <p className="text-sm font-semibold text-navy-800">Cloud Sync & Multi-Device Backup</p>
+              <p className="text-xs text-navy-500 mt-0.5">
+                {state.mode === 'real'
+                  ? 'Your medical records, vitals, and profile are backed up to the cloud for access across all your devices.'
+                  : 'Cloud synchronization is active for registered accounts.'}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={syncing || state.mode === 'demo'}
+              leftIcon={<RefreshCw className={`w-4 h-4 text-teal-600 ${syncing ? 'animate-spin' : ''}`} />}
+              onClick={async () => {
+                setSyncing(true);
+                try {
+                  if (currentUserId) {
+                    await syncCloud();
+                    await hydrateUser(currentUserId);
+                    showToast('Cloud sync complete! Your data is up to date across all devices.', 'success');
+                  } else {
+                    showToast('Please sign in to sync with the cloud.', 'info');
+                  }
+                } catch {
+                  showToast('Cloud sync failed. Please check your internet connection.', 'error');
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+            >
+              {syncing ? 'Syncing...' : 'Sync Now'}
+            </Button>
+          </div>
           <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
             <div>
               <p className="text-sm font-medium text-navy-700">ABDM & ABHA Digital Identity</p>

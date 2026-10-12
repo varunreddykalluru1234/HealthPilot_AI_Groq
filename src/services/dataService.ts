@@ -80,6 +80,10 @@ export function loadState(userId?: string | null): AppState {
     if (parsed.mode === 'demo') {
       return createEmptyState();
     }
+    // If we loaded from legacy STORAGE_KEY and have an effective user, migrate it to the user key
+    if (effectiveUserId && !localStorage.getItem(key) && localStorage.getItem(STORAGE_KEY)) {
+      localStorage.setItem(key, raw);
+    }
     return { ...createEmptyState(), ...parsed };
   } catch {
     return createEmptyState();

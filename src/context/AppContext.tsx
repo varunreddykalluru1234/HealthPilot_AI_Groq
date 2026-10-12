@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useReducer, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useReducer, useRef, type ReactNode } from 'react';
 import type {
   AppState,
   UserProfile,
@@ -14,7 +14,7 @@ import type {
   AbhaConnection,
 } from '@/types';
 import { loadState, saveState, createEmptyState, createDemoState, addTimelineEvent } from '@/services/dataService';
-import { fetchUserCloudState, syncUserCloudStateDebounced } from '@/services/supabaseStorageService';
+import { fetchUserCloudState, syncUserCloudState, syncUserCloudStateDebounced } from '@/services/supabaseStorageService';
 import { generateHealthInsights } from '@/services/aiService';
 import { uid } from '@/utils/helpers';
 import { supabase } from '@/lib/supabase';
@@ -92,6 +92,7 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         profile: { ...action.profile, updatedAt: new Date().toISOString() },
+        timeline: addTimelineEvent(state.timeline, 'record', 'Health profile updated', 'user'),
       };
     case 'ADD_MEASUREMENT':
       return {
@@ -225,6 +226,10 @@ interface AppContextValue {
   state: AppState;
   dispatch: React.Dispatch<Action>;
   isDemo: boolean;
+  isLoading: boolean;
+  currentUserId: string | null;
+  hydrateUser: (userId: string) => Promise<boolean>;
+  syncCloud: () => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -234,82 +239,198 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem('healthpilot_last_user_id');
   });
   const [state, dispatch] = useReducer(reducer, null, () => loadState(localStorage.getItem('healthpilot_last_user_id')));
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const cloudHydratedRef = useRef<boolean>(false);
 
-  // Persist state locally and sync to Supabase Cloud Database
+  // Persist state locally and sync to Supabase Cloud Database ONLY AFTER initial hydration is finished
   useEffect(() => {
     saveState(state, currentUserId);
-    if (currentUserId && state.mode === 'real' && state.isAuthenticated) {
+    if (currentUserId && state.mode === 'real' && state.isAuthenticated && cloudHydratedRef.current) {
       syncUserCloudStateDebounced(currentUserId, state);
     }
   }, [state, currentUserId]);
 
+  /**
+   * Unified, race-condition-free user data hydration for both page load and login.
+   * Ensures that when logging in from any device, data from Supabase Cloud
+   * is pulled down and properly populated in state and local storage.
+   */
+  const hydrateUser = async (userId: string): Promise<boolean> => {
+    setIsLoading(true);
+    setCurrentUserId(userId);
+    localStorage.setItem('healthpilot_last_user_id', userId);
+
+    try {
+      // 1. Check local cached state
+      const localCached = loadState(userId);
+
+      // 2. Fetch from Supabase Cloud Database
+      const cloudState = await fetchUserCloudState(userId);
+
+      const hasCloudData = Boolean(
+        cloudState && (
+          cloudState.isOnboarded ||
+          cloudState.profile ||
+          (cloudState.records && cloudState.records.length > 0) ||
+          (cloudState.measurements && cloudState.measurements.length > 0) ||
+          (cloudState.reports && cloudState.reports.length > 0) ||
+          (cloudState.medications && cloudState.medications.length > 0)
+        )
+      );
+
+      const hasLocalData = Boolean(
+        localCached && (
+          localCached.isOnboarded ||
+          localCached.profile ||
+          (localCached.records && localCached.records.length > 0) ||
+          (localCached.measurements && localCached.measurements.length > 0) ||
+          (localCached.reports && localCached.reports.length > 0) ||
+          (localCached.medications && localCached.medications.length > 0)
+        )
+      );
+
+      if (hasCloudData && cloudState) {
+        // Cloud has data. Prioritize cloud data, but merge any unsynced local records
+        const mergedState: AppState = {
+          ...createEmptyState(),
+          ...cloudState,
+          isAuthenticated: true,
+          mode: 'real',
+        };
+
+        if (hasLocalData && localCached) {
+          const recIds = new Set(mergedState.records.map((r) => r.id));
+          const extraRecs = (localCached.records || []).filter((r) => !recIds.has(r.id));
+          if (extraRecs.length) mergedState.records = [...mergedState.records, ...extraRecs];
+
+          const repIds = new Set(mergedState.reports.map((r) => r.id));
+          const extraReps = (localCached.reports || []).filter((r) => !repIds.has(r.id));
+          if (extraReps.length) mergedState.reports = [...mergedState.reports, ...extraReps];
+
+          const medIds = new Set(mergedState.medications.map((m) => m.id));
+          const extraMeds = (localCached.medications || []).filter((m) => !medIds.has(m.id));
+          if (extraMeds.length) mergedState.medications = [...mergedState.medications, ...extraMeds];
+
+          const measIds = new Set(mergedState.measurements.map((m) => m.id));
+          const extraMeas = (localCached.measurements || []).filter((m) => !measIds.has(m.id));
+          if (extraMeas.length) mergedState.measurements = [...mergedState.measurements, ...extraMeas];
+
+          const remIds = new Set(mergedState.reminders.map((r) => r.id));
+          const extraRems = (localCached.reminders || []).filter((r) => !remIds.has(r.id));
+          if (extraRems.length) mergedState.reminders = [...mergedState.reminders, ...extraRems];
+
+          const goalIds = new Set(mergedState.goals.map((g) => g.id));
+          const extraGoals = (localCached.goals || []).filter((g) => !goalIds.has(g.id));
+          if (extraGoals.length) mergedState.goals = [...mergedState.goals, ...extraGoals];
+
+          if (extraRecs.length || extraReps.length || extraMeds.length || extraMeas.length || extraRems.length || extraGoals.length) {
+            syncUserCloudState(userId, mergedState);
+          }
+        }
+
+        if (supabase) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user?.email && mergedState.profile && !mergedState.profile.email) {
+            mergedState.profile.email = session.user.email;
+          }
+        }
+
+        dispatch({ type: 'HYDRATE', state: mergedState });
+        saveState(mergedState, userId);
+        return true;
+      } else if (hasLocalData && localCached) {
+        // Local has data, but cloud is empty! (e.g. initial upload from first device)
+        const stateToUpload: AppState = {
+          ...localCached,
+          isAuthenticated: true,
+          mode: 'real',
+        };
+        if (supabase) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user?.email && stateToUpload.profile && !stateToUpload.profile.email) {
+            stateToUpload.profile.email = session.user.email;
+          }
+        }
+        dispatch({ type: 'HYDRATE', state: stateToUpload });
+        saveState(stateToUpload, userId);
+        await syncUserCloudState(userId, stateToUpload);
+        return true;
+      } else {
+        // Brand new user on both devices: prefill profile with auth email/name if available
+        let authEmail = '';
+        let authFullName = '';
+        if (supabase) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            authEmail = session.user.email || '';
+            authFullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '';
+          }
+        }
+
+        const initialNewUserState: AppState = {
+          ...createEmptyState(),
+          isAuthenticated: true,
+          mode: 'real',
+          profile: authEmail || authFullName ? {
+            id: uid('prof-'),
+            mode: 'real',
+            fullName: authFullName,
+            email: authEmail,
+            conditions: [],
+            allergies: [],
+            medications: [],
+            familyHistory: [],
+            goals: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } : null,
+        };
+        dispatch({ type: 'HYDRATE', state: initialNewUserState });
+        return false;
+      }
+    } catch (err) {
+      console.error('[AppContext] Hydration error:', err);
+      return false;
+    } finally {
+      cloudHydratedRef.current = true;
+      setIsLoading(false);
+    }
+  };
+
+  const syncCloud = async (): Promise<boolean> => {
+    if (!currentUserId || state.mode !== 'real' || !state.isAuthenticated) return false;
+    return syncUserCloudState(currentUserId, state);
+  };
+
   // Auth listener and cloud database hydration
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) {
+      cloudHydratedRef.current = true;
+      setIsLoading(false);
+      return;
+    }
 
     // 1. Check initial active session on page load
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user?.id) {
-        const userId = session.user.id;
-        setCurrentUserId(userId);
-        
-        // Hydrate from fast local cache first
-        const localCached = loadState(userId);
-        if (localCached.isAuthenticated) {
-          dispatch({ type: 'HYDRATE', state: localCached });
-        } else {
-          dispatch({ type: 'LOGIN', mode: 'real' });
-        }
-
-        // Hydrate from Supabase Cloud Database
-        const cloudState = await fetchUserCloudState(userId);
-        if (cloudState && (cloudState.profile || cloudState.isOnboarded)) {
-          dispatch({
-            type: 'HYDRATE',
-            state: {
-              ...createEmptyState(),
-              ...cloudState,
-              isAuthenticated: true,
-              mode: 'real',
-            } as AppState,
-          });
-        }
+        await hydrateUser(session.user.id);
+      } else {
+        cloudHydratedRef.current = true;
+        setIsLoading(false);
       }
     });
 
     // 2. Listen to ongoing auth state events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      (async () => {
-        if (event === 'SIGNED_OUT') {
-          setCurrentUserId(null);
-          dispatch({ type: 'LOGOUT' });
-        } else if (event === 'SIGNED_IN' && session) {
-          const userId = session.user.id;
-          setCurrentUserId(userId);
-
-          // Fast local cache hydration
-          const localCached = loadState(userId);
-          if (localCached.isAuthenticated && localCached.isOnboarded) {
-            dispatch({ type: 'HYDRATE', state: localCached });
-          } else {
-            dispatch({ type: 'LOGIN', mode: 'real' });
-          }
-
-          // Supabase Cloud Database hydration
-          const cloudState = await fetchUserCloudState(userId);
-          if (cloudState && (cloudState.profile || cloudState.isOnboarded)) {
-            dispatch({
-              type: 'HYDRATE',
-              state: {
-                ...createEmptyState(),
-                ...cloudState,
-                isAuthenticated: true,
-                mode: 'real',
-              } as AppState,
-            });
-          }
-        }
-      })();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        cloudHydratedRef.current = false;
+        setCurrentUserId(null);
+        localStorage.removeItem('healthpilot_last_user_id');
+        dispatch({ type: 'LOGOUT' });
+        setIsLoading(false);
+      } else if (event === 'SIGNED_IN' && session?.user?.id) {
+        await hydrateUser(session.user.id);
+      }
     });
 
     return () => { subscription.unsubscribe(); };
@@ -330,7 +451,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [state.isAuthenticated, state.isOnboarded, state.profile, state.measurements, state.reports, state.medications, state.reminders, state.goals, state.mode]);
 
-  return <AppContext.Provider value={{ state, dispatch, isDemo: state.mode === 'demo' }}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider
+      value={{
+        state,
+        dispatch,
+        isDemo: state.mode === 'demo',
+        isLoading,
+        currentUserId,
+        hydrateUser,
+        syncCloud,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
 }
 
 export function useApp(): AppContextValue {

@@ -4,7 +4,6 @@ import { useApp } from '@/context/AppContext';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDateTime } from '@/utils/helpers';
 import type { TimelineCategory } from '@/types';

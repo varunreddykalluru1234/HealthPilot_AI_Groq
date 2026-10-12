@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { GitCompare, ArrowLeft, Brain, Info, ChevronRight, Sparkles, ArrowRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { GitCompare, Brain, Info, ChevronRight, Sparkles, ArrowRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useRouter } from '@/context/RouterContext';
 import { PageHeader } from '@/components/PageHeader';
@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDate, statusColor } from '@/utils/helpers';
 import { compareHealthReports } from '@/services/aiService';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
-import type { MedicalReport } from '@/types';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 export function ReportComparisonPage() {
   const { state } = useApp();
