@@ -119,6 +119,53 @@ interface LanguageContextValue {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
+function applyGoogleTranslation(lang: LangCode) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (lang === 'en') {
+      document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      if (window.location.hostname) {
+        document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=${window.location.hostname}; path=/;`;
+        document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=.${window.location.hostname}; path=/;`;
+      }
+      document.cookie = 'googtrans=/en/en; path=/;';
+      if (window.location.hostname) {
+        document.cookie = `googtrans=/en/en; domain=${window.location.hostname}; path=/;`;
+        document.cookie = `googtrans=/en/en; domain=.${window.location.hostname}; path=/;`;
+      }
+    } else {
+      const val = `/en/${lang}`;
+      document.cookie = `googtrans=${val}; path=/;`;
+      if (window.location.hostname) {
+        document.cookie = `googtrans=${val}; domain=${window.location.hostname}; path=/;`;
+        document.cookie = `googtrans=${val}; domain=.${window.location.hostname}; path=/;`;
+      }
+    }
+
+    const triggerSelect = () => {
+      const select = document.querySelector('.goog-te-combo') as HTMLSelectElement | null;
+      if (select) {
+        if (select.value !== lang) {
+          select.value = lang;
+          select.dispatchEvent(new Event('change'));
+        }
+        return true;
+      }
+      return false;
+    };
+
+    if (!triggerSelect()) {
+      setTimeout(triggerSelect, 200);
+      setTimeout(triggerSelect, 600);
+      setTimeout(triggerSelect, 1200);
+      setTimeout(triggerSelect, 2500);
+    }
+  } catch (err) {
+    console.warn('[LanguageContext] Full page translation trigger:', err);
+  }
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -128,6 +175,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     translateDOM(uiLang);
+    applyGoogleTranslation(uiLang);
 
     // Watch for dynamic route transitions and DOM changes to translate whole page
     let observer: MutationObserver | null = null;
@@ -160,6 +208,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     // Update <html lang> attribute for accessibility
     document.documentElement.lang = lang;
     translateDOM(lang);
+    applyGoogleTranslation(lang);
   }, []);
 
   const setSummaryLang = useCallback((lang: LangCode) => {
