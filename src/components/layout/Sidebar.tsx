@@ -50,12 +50,20 @@ export function Sidebar({ onNavigate, onGoHome, onClose }: SidebarProps) {
     onNavigate?.();
   };
 
-  const handleLogout = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
+  const handleLogout = () => {
+    onClose?.();
     dispatch({ type: 'LOGOUT' });
     onGoHome?.();
+    try {
+      localStorage.removeItem('healthpilot_last_user_id');
+    } catch {
+      // ignore
+    }
+    if (supabase) {
+      supabase.auth.signOut().catch((err) => {
+        console.warn('[Sidebar] SignOut background:', err);
+      });
+    }
   };
 
   return (

@@ -72,21 +72,35 @@ export function SettingsPage() {
     showToast('All health records have been deleted.', 'success');
   };
 
-  const handleSignOut = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
+  const handleSignOut = () => {
+    try {
+      localStorage.removeItem('healthpilot_last_user_id');
+    } catch {
+      // ignore
     }
     dispatch({ type: 'LOGOUT' });
     showToast('You have been signed out.', 'info');
+    if (supabase) {
+      supabase.auth.signOut().catch((err) => {
+        console.warn('[SettingsPage] SignOut background:', err);
+      });
+    }
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = () => {
     setDeleteAccountOpen(false);
-    if (supabase) {
-      await supabase.auth.signOut();
+    try {
+      localStorage.removeItem('healthpilot_last_user_id');
+    } catch {
+      // ignore
     }
     dispatch({ type: 'LOGOUT' });
     showToast('Account deleted. All data has been cleared.', 'success');
+    if (supabase) {
+      supabase.auth.signOut().catch((err) => {
+        console.warn('[SettingsPage] SignOut background:', err);
+      });
+    }
   };
 
   const Toggle = ({ checked, onChange, label, description }: { checked: boolean; onChange: () => void; label: string; description: string }) => (
