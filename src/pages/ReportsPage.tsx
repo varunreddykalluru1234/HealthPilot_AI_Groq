@@ -524,18 +524,18 @@ export function ReportsPage() {
                     {verifyResults.map((r) => {
                       const sc = statusColor(r.status);
                       return (
-                        <div key={r.id} className="grid grid-cols-12 gap-2 items-center p-3 bg-slate-50 rounded-xl">
-                          <input className="col-span-3 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Test name" value={r.testName} onChange={(e) => updateResult(r.id, 'testName', e.target.value)} />
-                          <input className="col-span-2 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Value" value={r.value} onChange={(e) => updateResult(r.id, 'value', e.target.value)} />
-                          <input className="col-span-2 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Unit" value={r.unit} onChange={(e) => updateResult(r.id, 'unit', e.target.value)} />
-                          <input className="col-span-3 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Reference range" value={r.referenceRange ?? ''} onChange={(e) => updateResult(r.id, 'referenceRange', e.target.value)} />
-                          <div className="col-span-1 flex items-center justify-center">
+                        <div key={r.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center p-3 bg-slate-50 rounded-xl">
+                          <input className="col-span-1 sm:col-span-3 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Test name" value={r.testName} onChange={(e) => updateResult(r.id, 'testName', e.target.value)} />
+                          <div className="col-span-1 sm:col-span-4 grid grid-cols-2 gap-2">
+                            <input className="px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Value" value={r.value} onChange={(e) => updateResult(r.id, 'value', e.target.value)} />
+                            <input className="px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Unit" value={r.unit} onChange={(e) => updateResult(r.id, 'unit', e.target.value)} />
+                          </div>
+                          <input className="col-span-1 sm:col-span-3 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Reference range" value={r.referenceRange ?? ''} onChange={(e) => updateResult(r.id, 'referenceRange', e.target.value)} />
+                          <div className="col-span-1 sm:col-span-2 flex items-center justify-between sm:justify-center gap-2">
                             <Badge variant={r.status === 'within_range' ? 'teal' : r.status === 'outside_range' ? 'red' : 'amber'}>
                               <span className="text-[10px]">{sc.label.split(' ')[0]}</span>
                             </Badge>
-                          </div>
-                          <div className="col-span-1 flex justify-center">
-                            <button onClick={() => removeResult(r.id)} className="text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+                            <button onClick={() => removeResult(r.id)} className="text-red-400 hover:text-red-600 p-1 cursor-pointer"><X className="w-4 h-4" /></button>
                           </div>
                         </div>
                       );
@@ -564,13 +564,15 @@ export function ReportsPage() {
                   <div className="space-y-3">
                     {verifyMedicines.map((m) => (
                       <div key={m.id} className="p-3 bg-slate-50 rounded-xl space-y-2">
-                        <div className="grid grid-cols-12 gap-2 items-start">
-                          <input className="col-span-4 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Medicine name" value={m.name} onChange={(e) => updateMedicine(m.id, 'name', e.target.value)} />
-                          <input className="col-span-3 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Dosage (e.g. 500mg)" value={m.dosage} onChange={(e) => updateMedicine(m.id, 'dosage', e.target.value)} />
-                          <input className="col-span-3 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Frequency" value={m.frequency} onChange={(e) => updateMedicine(m.id, 'frequency', e.target.value)} />
-                          <input className="col-span-1 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Duration" value={m.duration ?? ''} onChange={(e) => updateMedicine(m.id, 'duration', e.target.value)} />
-                          <div className="col-span-1 flex justify-center pt-1.5">
-                            <button onClick={() => removeMedicine(m.id)} className="text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start">
+                          <input className="col-span-1 sm:col-span-4 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Medicine name" value={m.name} onChange={(e) => updateMedicine(m.id, 'name', e.target.value)} />
+                          <div className="col-span-1 sm:col-span-6 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <input className="px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Dosage (e.g. 500mg)" value={m.dosage} onChange={(e) => updateMedicine(m.id, 'dosage', e.target.value)} />
+                            <input className="px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Frequency" value={m.frequency} onChange={(e) => updateMedicine(m.id, 'frequency', e.target.value)} />
+                            <input className="px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Duration" value={m.duration ?? ''} onChange={(e) => updateMedicine(m.id, 'duration', e.target.value)} />
+                          </div>
+                          <div className="col-span-1 sm:col-span-2 flex justify-end sm:justify-center pt-1">
+                            <button onClick={() => removeMedicine(m.id)} className="text-red-400 hover:text-red-600 p-1 cursor-pointer"><X className="w-4 h-4" /></button>
                           </div>
                         </div>
                         {m.instructions && (
@@ -598,16 +600,18 @@ export function ReportsPage() {
                 ) : (
                   <div className="space-y-2">
                     {verifyDiagnoses.map((d) => (
-                      <div key={d.id} className="grid grid-cols-12 gap-2 items-center p-3 bg-slate-50 rounded-xl">
-                        <input className="col-span-6 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Diagnosis" value={d.text} onChange={(e) => updateDiagnosis(d.id, 'text', e.target.value)} />
-                        <input className="col-span-2 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="ICD Code" value={d.icdCode ?? ''} onChange={(e) => updateDiagnosis(d.id, 'icdCode', e.target.value)} />
-                        <select className="col-span-3 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" value={d.type} onChange={(e) => updateDiagnosis(d.id, 'type', e.target.value)}>
-                          <option value="primary">Primary</option>
-                          <option value="secondary">Secondary</option>
-                          <option value="differential">Differential</option>
-                        </select>
-                        <div className="col-span-1 flex justify-center">
-                          <button onClick={() => removeDiagnosis(d.id)} className="text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+                      <div key={d.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center p-3 bg-slate-50 rounded-xl">
+                        <input className="col-span-1 sm:col-span-5 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="Diagnosis" value={d.text} onChange={(e) => updateDiagnosis(d.id, 'text', e.target.value)} />
+                        <div className="col-span-1 sm:col-span-5 grid grid-cols-2 gap-2">
+                          <input className="px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" placeholder="ICD Code" value={d.icdCode ?? ''} onChange={(e) => updateDiagnosis(d.id, 'icdCode', e.target.value)} />
+                          <select className="px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white" value={d.type} onChange={(e) => updateDiagnosis(d.id, 'type', e.target.value)}>
+                            <option value="primary">Primary</option>
+                            <option value="secondary">Secondary</option>
+                            <option value="differential">Differential</option>
+                          </select>
+                        </div>
+                        <div className="col-span-1 sm:col-span-2 flex justify-end sm:justify-center">
+                          <button onClick={() => removeDiagnosis(d.id)} className="text-red-400 hover:text-red-600 p-1 cursor-pointer"><X className="w-4 h-4" /></button>
                         </div>
                       </div>
                     ))}

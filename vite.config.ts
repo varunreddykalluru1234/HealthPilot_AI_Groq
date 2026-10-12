@@ -10,6 +10,14 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    host: true,
+    port: 5173,
+  },
+  preview: {
+    host: true,
+    port: 5173,
+  },
   optimizeDeps: {
     // lucide-react uses dynamic imports that confuse the pre-bundler
     exclude: ['lucide-react'],

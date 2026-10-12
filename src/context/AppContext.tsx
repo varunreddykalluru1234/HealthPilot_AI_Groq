@@ -410,22 +410,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Safety timeout: Never stay stuck on loading data screen for more than 2.5 seconds on mobile
+    const safetyTimer = setTimeout(() => {
+      cloudHydratedRef.current = true;
+      setIsLoading(false);
+    }, 2500);
+
     // 1. Check initial active session on page load
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user?.id) {
-        await hydrateUser(session.user.id);
-      } else {
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        clearTimeout(safetyTimer);
+        if (session?.user?.id) {
+          await hydrateUser(session.user.id);
+        } else {
+          cloudHydratedRef.current = true;
+          setIsLoading(false);
+        }
+      })
+      .catch((err) => {
+        clearTimeout(safetyTimer);
+        console.warn('[AppContext] getSession check failed, proceeding with local state:', err);
         cloudHydratedRef.current = true;
         setIsLoading(false);
-      }
-    });
+      });
 
     // 2. Listen to ongoing auth state events
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         cloudHydratedRef.current = false;
         setCurrentUserId(null);
-        localStorage.removeItem('healthpilot_last_user_id');
+        try {
+          localStorage.removeItem('healthpilot_last_user_id');
+        } catch {
+          // ignore
+        }
         dispatch({ type: 'LOGOUT' });
         setIsLoading(false);
       } else if (event === 'SIGNED_IN' && session?.user?.id) {
@@ -433,7 +451,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => { subscription.unsubscribe(); };
+    return () => {
+      clearTimeout(safetyTimer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

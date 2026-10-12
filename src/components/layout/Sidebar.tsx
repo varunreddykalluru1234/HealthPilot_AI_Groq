@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Menu, X, LogOut, Sparkles, Globe, ChevronDown } from 'lucide-react';
+import { Activity, Menu, X, LogOut, Sparkles, Globe, ChevronDown, FolderOpen, FileText } from 'lucide-react';
 import { navItems, type PageKey } from '@/config/navigation';
 import { useRouter } from '@/context/RouterContext';
 import { useApp } from '@/context/AppContext';
@@ -13,9 +13,10 @@ import { LANGUAGES, type TranslationKey } from '@/i18n/translations';
 interface SidebarProps {
   onNavigate?: () => void;
   onGoHome?: () => void;
+  onClose?: () => void;
 }
 
-export function Sidebar({ onNavigate, onGoHome }: SidebarProps) {
+export function Sidebar({ onNavigate, onGoHome, onClose }: SidebarProps) {
   const { page, navigate } = useRouter();
   const { state, dispatch, isDemo } = useApp();
   const { uiLang, setUiLang, T } = useLanguage();
@@ -58,23 +59,35 @@ export function Sidebar({ onNavigate, onGoHome }: SidebarProps) {
   };
 
   return (
-    <div className="flex flex-col h-full w-64 bg-white border-r border-slate-200/80 flex-shrink-0 shadow-sm">
-      <button
-        onClick={onGoHome}
-        className="flex items-center gap-3 px-5 py-5 border-b border-slate-100 text-left hover:bg-slate-50/70 transition-colors w-full group cursor-pointer"
-        title="Go to Homepage"
-      >
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-teal-600/20 group-hover:scale-105 transition-transform">
-          <Activity className="w-5 h-5 text-white stroke-[2.5]" />
-        </div>
-        <div>
-          <div className="flex items-center gap-1.5">
-            <h1 className="font-heading font-extrabold text-navy-900 text-base leading-tight">HealthPilot</h1>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200/60">AI</span>
+    <div className="flex flex-col h-full w-full sm:w-64 bg-white border-r border-slate-200/80 flex-shrink-0 shadow-sm">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <button
+          onClick={onGoHome}
+          className="flex items-center gap-3 text-left hover:bg-slate-50/70 transition-colors flex-1 group cursor-pointer"
+          title="Go to Homepage"
+        >
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-teal-600/20 group-hover:scale-105 transition-transform flex-shrink-0">
+            <Activity className="w-5 h-5 text-white stroke-[2.5]" />
           </div>
-          <p className="text-[11px] text-navy-400 font-medium">Personal Health Copilot</p>
-        </div>
-      </button>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h1 className="font-heading font-extrabold text-navy-900 text-base leading-tight">HealthPilot</h1>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200/60">AI</span>
+            </div>
+            <p className="text-[11px] text-navy-400 font-medium">Personal Health Copilot</p>
+          </div>
+        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-2 -mr-2 rounded-xl text-slate-400 hover:text-navy-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            title="Close menu"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
 
       <div className="px-3 pt-3 flex items-center gap-2">
         {/* Demo Mode Badge */}
@@ -193,10 +206,10 @@ export function Sidebar({ onNavigate, onGoHome }: SidebarProps) {
 export function MobileSidebar({ open, onClose, onGoHome }: { open: boolean; onClose: () => void; onGoHome?: () => void }) {
   if (!open) return null;
   return (
-    <div className="lg:hidden fixed inset-0 z-40">
-      <div className="absolute inset-0 bg-navy-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="absolute left-0 top-0 bottom-0 animate-slide-in-right">
-        <Sidebar onNavigate={onClose} onGoHome={() => { onClose(); onGoHome?.(); }} />
+    <div className="lg:hidden fixed inset-0 z-50">
+      <div className="fixed inset-0 bg-navy-900/50 backdrop-blur-xs transition-opacity" onClick={onClose} />
+      <div className="fixed left-0 top-0 bottom-0 w-72 max-w-[85vw] h-full h-[100dvh] bg-white shadow-2xl z-10 animate-slide-in-right">
+        <Sidebar onNavigate={onClose} onGoHome={() => { onClose(); onGoHome?.(); }} onClose={onClose} />
       </div>
     </div>
   );
@@ -247,10 +260,62 @@ export function MobileTopBar({ onMenuClick, onGoHome }: { onMenuClick: () => voi
             </>
           )}
         </div>
-        <button onClick={onMenuClick} className="p-2 rounded-lg hover:bg-slate-100">
+        <button onClick={onMenuClick} className="p-2 rounded-lg hover:bg-slate-100 cursor-pointer" aria-label="Open navigation menu">
           <Menu className="w-5 h-5 text-navy-600" />
         </button>
       </div>
     </div>
+  );
+}
+
+export function MobileBottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
+  const { page, navigate } = useRouter();
+
+  const tabs: { key: PageKey; label: string; icon: typeof Activity; isAi?: boolean }[] = [
+    { key: 'dashboard', label: 'Dashboard', icon: Activity },
+    { key: 'copilot', label: 'Copilot', icon: Sparkles, isAi: true },
+    { key: 'records', label: 'Records', icon: FolderOpen },
+    { key: 'reports', label: 'Reports', icon: FileText },
+  ];
+
+  return (
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-2 py-1 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pb-[max(0.35rem,env(safe-area-inset-bottom))]">
+      <div className="flex items-center justify-around max-w-md mx-auto">
+        {tabs.map((tab) => {
+          const isActive = page === tab.key;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => navigate(tab.key)}
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer min-w-[56px] relative ${
+                isActive
+                  ? 'text-teal-700 font-semibold'
+                  : 'text-navy-400 hover:text-navy-700'
+              }`}
+            >
+              <div className={`relative p-1 rounded-lg ${isActive ? 'bg-teal-50' : ''}`}>
+                <Icon className={`w-5 h-5 ${isActive ? 'text-teal-600 stroke-[2.5]' : 'text-navy-400'}`} />
+                {tab.isAi && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-teal-500 ring-2 ring-white" />
+                )}
+              </div>
+              <span className="text-[10px] mt-0.5 leading-tight">{tab.label}</span>
+            </button>
+          );
+        })}
+        <button
+          onClick={onOpenMenu}
+          className="flex flex-col items-center justify-center py-1 px-3 rounded-xl text-navy-400 hover:text-navy-700 transition-all cursor-pointer min-w-[56px]"
+          title="More options"
+          aria-label="More navigation options"
+        >
+          <div className="p-1 rounded-lg">
+            <Menu className="w-5 h-5 text-navy-400" />
+          </div>
+          <span className="text-[10px] mt-0.5 leading-tight">More</span>
+        </button>
+      </div>
+    </nav>
   );
 }

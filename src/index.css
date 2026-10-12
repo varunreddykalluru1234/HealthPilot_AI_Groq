@@ -3,16 +3,25 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
     @apply bg-slate-50/70 text-navy-800 antialiased selection:bg-teal-100 selection:text-teal-900;
     letter-spacing: -0.012em;
+    -webkit-tap-highlight-color: transparent;
   }
 
   h1, h2, h3, h4, .font-heading {
@@ -69,6 +78,15 @@
   }
 
   .input-base {
-    @apply w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-navy-800 placeholder:text-slate-400 transition-all duration-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 focus:outline-none;
+    /* text-base on mobile prevents iOS Safari from automatically zooming into the page on focus */
+    @apply w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-navy-800 placeholder:text-slate-400 transition-all duration-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 focus:outline-none text-base sm:text-sm;
+  }
+
+  .pb-safe {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .pt-safe {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
   }
 }

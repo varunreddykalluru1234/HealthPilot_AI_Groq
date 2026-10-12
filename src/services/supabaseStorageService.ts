@@ -28,14 +28,20 @@ export async function fetchUserCloudState(userId: string): Promise<Partial<AppSt
   if (!isSupabaseConfigured || !supabase) return null;
 
   try {
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from('user_health_state')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
 
+    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: 'Cloud fetch request timed out' } }), 3500)
+    );
+
+    const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+
     if (error) {
-      console.warn('[Supabase Storage] Fetch error:', error.message);
+      console.warn('[Supabase Storage] Fetch error or timeout:', error.message);
       return null;
     }
 

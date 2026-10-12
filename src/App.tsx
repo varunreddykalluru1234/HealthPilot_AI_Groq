@@ -39,7 +39,7 @@ function AppContent() {
         const raw = localStorage.getItem(`healthpilot_user_${lastUser}`);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed?.isAuthenticated) return 'app';
+          if (parsed?.isAuthenticated && parsed?.mode !== 'demo') return 'app';
         }
       }
     } catch {
@@ -110,9 +110,9 @@ function AppContent() {
     );
   }
 
-  if (view === 'app' && isLoading) {
+  if (view === 'app' && isLoading && state.isAuthenticated && state.mode !== 'demo') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+      <div className="min-h-screen min-h-[100dvh] flex flex-col items-center justify-center bg-slate-50 gap-4 p-4 animate-fade-in">
         <div className="w-12 h-12 rounded-2xl bg-teal-600 flex items-center justify-center shadow-lg shadow-teal-600/20 animate-pulse">
           <Activity className="w-6 h-6 text-white" />
         </div>
@@ -120,6 +120,12 @@ function AppContent() {
           <p className="text-sm font-semibold text-navy-800">Loading your health data...</p>
           <p className="text-xs text-navy-400 mt-1">HealthPilot AI is syncing your health records</p>
         </div>
+        <button
+          onClick={() => setView('landing')}
+          className="text-xs text-teal-700 hover:text-teal-800 font-medium underline mt-2 cursor-pointer"
+        >
+          Return to homepage
+        </button>
       </div>
     );
   }
