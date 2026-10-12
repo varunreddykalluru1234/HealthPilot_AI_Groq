@@ -228,7 +228,7 @@ interface AppContextValue {
   isDemo: boolean;
   isLoading: boolean;
   currentUserId: string | null;
-  hydrateUser: (userId: string) => Promise<boolean>;
+  hydrateUser: (userId: string, userObj?: { email?: string; user_metadata?: any }) => Promise<boolean>;
   syncCloud: () => Promise<boolean>;
 }
 
@@ -239,8 +239,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem('healthpilot_last_user_id');
   });
   const [state, dispatch] = useReducer(reducer, null, () => loadState(localStorage.getItem('healthpilot_last_user_id')));
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    // If local state is already cached and onboarded, do not block the UI
+    const lastUser = localStorage.getItem('healthpilot_last_user_id');
+    if (!lastUser) return false;
+    try {
+      const cached = localStorage.getItem(`healthpilot_user_${lastUser}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.isAuthenticated && (parsed?.isOnboarded || parsed?.profile)) return false;
+      }
+    } catch {
+      // ignore
+    }
+    return true;
+  });
   const cloudHydratedRef = useRef<boolean>(false);
+  const activeHydrationRef = useRef<string | null>(null);
 
   // Persist state locally and sync to Supabase Cloud Database ONLY AFTER initial hydration is finished
   useEffect(() => {
@@ -251,19 +266,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [state, currentUserId]);
 
   /**
-   * Unified, race-condition-free user data hydration for both page load and login.
-   * Ensures that when logging in from any device, data from Supabase Cloud
-   * is pulled down and properly populated in state and local storage.
+   * Fast, non-blocking user data hydration for instant mobile load and background cloud sync.
    */
-  const hydrateUser = async (userId: string): Promise<boolean> => {
-    setIsLoading(true);
+  const hydrateUser = async (userId: string, userObj?: { email?: string; user_metadata?: any }): Promise<boolean> => {
+    // Prevent duplicate concurrent hydration calls for the same user
+    if (activeHydrationRef.current === userId) return true;
+    activeHydrationRef.current = userId;
+
     setCurrentUserId(userId);
-    localStorage.setItem('healthpilot_last_user_id', userId);
+    try {
+      localStorage.setItem('healthpilot_last_user_id', userId);
+    } catch {
+      // ignore
+    }
+
+    // 1. Immediately check local cached state — if present, display instantly (0ms lag!)
+    const localCached = loadState(userId);
+    if (localCached && (localCached.isOnboarded || localCached.profile)) {
+      dispatch({ type: 'HYDRATE', state: localCached });
+      setIsLoading(false);
+    }
 
     try {
-      // 1. Check local cached state
-      const localCached = loadState(userId);
-
       // 2. Fetch from Supabase Cloud Database
       const cloudState = await fetchUserCloudState(userId);
 
@@ -288,6 +312,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           (localCached.medications && localCached.medications.length > 0)
         )
       );
+
+      const fallbackEmail = userObj?.email || localCached?.profile?.email || '';
+      const fallbackName = userObj?.user_metadata?.full_name || userObj?.user_metadata?.name || localCached?.profile?.fullName || '';
 
       if (hasCloudData && cloudState) {
         // Cloud has data. Prioritize cloud data, but merge any unsynced local records
@@ -324,58 +351,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (extraGoals.length) mergedState.goals = [...mergedState.goals, ...extraGoals];
 
           if (extraRecs.length || extraReps.length || extraMeds.length || extraMeas.length || extraRems.length || extraGoals.length) {
-            syncUserCloudState(userId, mergedState);
+            syncUserCloudState(userId, mergedState).catch(console.warn);
           }
         }
 
-        if (supabase) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user?.email && mergedState.profile && !mergedState.profile.email) {
-            mergedState.profile.email = session.user.email;
-          }
+        if (fallbackEmail && mergedState.profile && !mergedState.profile.email) {
+          mergedState.profile.email = fallbackEmail;
         }
 
         dispatch({ type: 'HYDRATE', state: mergedState });
         saveState(mergedState, userId);
         return true;
       } else if (hasLocalData && localCached) {
-        // Local has data, but cloud is empty! (e.g. initial upload from first device)
         const stateToUpload: AppState = {
           ...localCached,
           isAuthenticated: true,
           mode: 'real',
         };
-        if (supabase) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user?.email && stateToUpload.profile && !stateToUpload.profile.email) {
-            stateToUpload.profile.email = session.user.email;
-          }
+        if (fallbackEmail && stateToUpload.profile && !stateToUpload.profile.email) {
+          stateToUpload.profile.email = fallbackEmail;
         }
         dispatch({ type: 'HYDRATE', state: stateToUpload });
         saveState(stateToUpload, userId);
-        await syncUserCloudState(userId, stateToUpload);
+        syncUserCloudState(userId, stateToUpload).catch(console.warn);
         return true;
       } else {
-        // Brand new user on both devices: prefill profile with auth email/name if available
-        let authEmail = '';
-        let authFullName = '';
-        if (supabase) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            authEmail = session.user.email || '';
-            authFullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '';
-          }
-        }
-
         const initialNewUserState: AppState = {
           ...createEmptyState(),
           isAuthenticated: true,
           mode: 'real',
-          profile: authEmail || authFullName ? {
+          profile: fallbackEmail || fallbackName ? {
             id: uid('prof-'),
             mode: 'real',
-            fullName: authFullName,
-            email: authEmail,
+            fullName: fallbackName,
+            email: fallbackEmail,
             conditions: [],
             allergies: [],
             medications: [],
@@ -393,6 +402,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return false;
     } finally {
       cloudHydratedRef.current = true;
+      activeHydrationRef.current = null;
       setIsLoading(false);
     }
   };
@@ -410,18 +420,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Safety timeout: Never stay stuck on loading data screen for more than 2.5 seconds on mobile
+    // Safety timeout: Never stay stuck on loading data screen for more than 1.5 seconds on mobile
     const safetyTimer = setTimeout(() => {
       cloudHydratedRef.current = true;
       setIsLoading(false);
-    }, 2500);
+    }, 1500);
 
     // 1. Check initial active session on page load
     supabase.auth.getSession()
       .then(async ({ data: { session } }) => {
         clearTimeout(safetyTimer);
         if (session?.user?.id) {
-          await hydrateUser(session.user.id);
+          await hydrateUser(session.user.id, session.user);
         } else {
           cloudHydratedRef.current = true;
           setIsLoading(false);
@@ -447,7 +457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'LOGOUT' });
         setIsLoading(false);
       } else if (event === 'SIGNED_IN' && session?.user?.id) {
-        await hydrateUser(session.user.id);
+        await hydrateUser(session.user.id, session.user);
       }
     });
 

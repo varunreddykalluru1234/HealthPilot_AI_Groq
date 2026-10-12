@@ -71,7 +71,7 @@ export function AuthPage({ onSuccess, onBack }: AuthPageProps) {
           showToast('Account created! Let\'s set up your health profile.', 'success');
           setLoading(false);
           onSuccess();
-          hydrateUser(data.user.id).catch(console.warn);
+          hydrateUser(data.user.id, data.user).catch(console.warn);
           return;
         } else {
           dispatch({ type: 'LOGIN', mode: 'real' });
@@ -93,9 +93,9 @@ export function AuthPage({ onSuccess, onBack }: AuthPageProps) {
         setLoading(false);
         onSuccess();
 
-        // Hydrate and sync latest cloud data in the background
+        // Hydrate and sync latest cloud data in the background with user info
         if (data?.user?.id) {
-          hydrateUser(data.user.id).catch((err) => {
+          hydrateUser(data.user.id, data.user).catch((err) => {
             console.warn('[AuthPage] Background cloud hydration:', err);
           });
         }

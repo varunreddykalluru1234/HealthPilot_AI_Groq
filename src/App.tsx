@@ -110,7 +110,7 @@ function AppContent() {
     );
   }
 
-  if (view === 'app' && isLoading && state.isAuthenticated && state.mode !== 'demo') {
+  if (view === 'app' && isLoading && state.isAuthenticated && state.mode !== 'demo' && !state.profile && (!state.records || state.records.length === 0)) {
     return (
       <div className="min-h-screen min-h-[100dvh] flex flex-col items-center justify-center bg-slate-50 gap-4 p-4 animate-fade-in">
         <div className="w-12 h-12 rounded-2xl bg-teal-600 flex items-center justify-center shadow-lg shadow-teal-600/20 animate-pulse">
