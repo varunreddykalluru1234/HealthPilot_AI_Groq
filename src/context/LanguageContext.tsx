@@ -63,6 +63,35 @@ interface LanguageContextValue {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
+function applyFullPageTranslation(lang: LangCode) {
+  try {
+    const val = lang === 'en' ? '/en/en' : `/en/${lang}`;
+    document.cookie = `googtrans=${val}; path=/;`;
+    if (window.location.hostname) {
+      document.cookie = `googtrans=${val}; path=/; domain=${window.location.hostname};`;
+      document.cookie = `googtrans=${val}; path=/; domain=.${window.location.hostname};`;
+    }
+
+    const triggerSelect = () => {
+      const select = document.querySelector('.goog-te-combo') as HTMLSelectElement | null;
+      if (select) {
+        select.value = lang;
+        select.dispatchEvent(new Event('change'));
+        return true;
+      }
+      return false;
+    };
+
+    if (!triggerSelect()) {
+      setTimeout(triggerSelect, 300);
+      setTimeout(triggerSelect, 800);
+      setTimeout(triggerSelect, 1500);
+    }
+  } catch (err) {
+    console.warn('[LanguageContext] Full page translation trigger:', err);
+  }
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -70,11 +99,22 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [summaryLang, setSummaryLangState] = useState<LangCode>(() => loadLang(KEY_SUMMARY_LANG, 'en'));
   const [ocrLang, setOcrLangState] = useState<LangCode>(() => loadLang(KEY_OCR_LANG, 'en'));
 
+  useEffect(() => {
+    if (uiLang !== 'en') {
+      applyFullPageTranslation(uiLang);
+    }
+  }, [uiLang]);
+
   const setUiLang = useCallback((lang: LangCode) => {
     setUiLangState(lang);
-    localStorage.setItem(KEY_UI_LANG, lang);
+    try {
+      localStorage.setItem(KEY_UI_LANG, lang);
+    } catch {
+      // ignore
+    }
     // Update <html lang> attribute for accessibility
     document.documentElement.lang = lang;
+    applyFullPageTranslation(lang);
   }, []);
 
   const setSummaryLang = useCallback((lang: LangCode) => {

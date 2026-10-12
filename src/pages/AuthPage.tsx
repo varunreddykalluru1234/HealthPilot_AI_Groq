@@ -67,33 +67,40 @@ export function AuthPage({ onSuccess, onBack }: AuthPageProps) {
           return;
         }
         if (data.user?.id) {
-          await hydrateUser(data.user.id);
+          dispatch({ type: 'LOGIN', mode: 'real' });
+          showToast('Account created! Let\'s set up your health profile.', 'success');
+          setLoading(false);
+          onSuccess();
+          hydrateUser(data.user.id).catch(console.warn);
+          return;
         } else {
           dispatch({ type: 'LOGIN', mode: 'real' });
+          showToast('Account created! Let\'s set up your health profile.', 'success');
+          setLoading(false);
+          onSuccess();
+          return;
         }
-        showToast('Account created! Let\'s set up your health profile.', 'success');
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: form.email,
+          email: form.email.trim(),
           password: form.password,
         });
         if (error) throw error;
 
-        // Fully hydrate user cloud data before navigating to app view
+        // Instantly transition user to dashboard with zero lag
+        dispatch({ type: 'LOGIN', mode: 'real' });
+        showToast('Welcome back!', 'success');
+        setLoading(false);
+        onSuccess();
+
+        // Hydrate and sync latest cloud data in the background
         if (data?.user?.id) {
-          const hasCloudData = await hydrateUser(data.user.id);
-          if (hasCloudData) {
-            showToast('Welcome back! Your health data has been synced.', 'success');
-          } else {
-            showToast('Welcome back!', 'success');
-          }
-        } else {
-          dispatch({ type: 'LOGIN', mode: 'real' });
-          showToast('Welcome back!', 'success');
+          hydrateUser(data.user.id).catch((err) => {
+            console.warn('[AuthPage] Background cloud hydration:', err);
+          });
         }
+        return;
       }
-      setLoading(false);
-      onSuccess();
     } catch (err) {
       setLoading(false);
       const msg = err instanceof Error ? err.message : 'Authentication failed. Please try again.';

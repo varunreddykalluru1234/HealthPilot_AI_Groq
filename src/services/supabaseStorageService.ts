@@ -35,7 +35,7 @@ export async function fetchUserCloudState(userId: string): Promise<Partial<AppSt
       .maybeSingle();
 
     const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: 'Cloud fetch request timed out' } }), 3500)
+      setTimeout(() => resolve({ data: null, error: { message: 'Cloud fetch request timed out' } }), 1500)
     );
 
     const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
