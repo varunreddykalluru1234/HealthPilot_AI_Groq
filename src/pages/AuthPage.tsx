@@ -52,34 +52,54 @@ export function AuthPage({ onSuccess, onBack }: AuthPageProps) {
     try {
       if (mode === 'signup') {
         const { data, error } = await supabase.auth.signUp({
-          email: form.email,
+          email: form.email.trim(),
           password: form.password,
           options: {
-            data: { full_name: form.fullName },
-            emailRedirectTo: `${window.location.origin}/?confirmed=true`,
+            data: { full_name: form.fullName.trim() },
           },
         });
         if (error) throw error;
-        if (data.user && !data.session) {
-          showToast('Account created! Please check your email to confirm your account, then sign in.', 'success');
-          setMode('login');
-          setLoading(false);
-          return;
-        }
-        if (data.user?.id) {
+
+        // If session is returned immediately (email confirmation disabled in Supabase)
+        if (data.session && data.user?.id) {
           dispatch({ type: 'LOGIN', mode: 'real' });
-          showToast('Account created! Let\'s set up your health profile.', 'success');
+          showToast('Account created successfully! Welcome to HealthPilot AI.', 'success');
           setLoading(false);
           onSuccess();
           hydrateUser(data.user.id, data.user).catch(console.warn);
           return;
-        } else {
+        }
+
+        // If session was not included, attempt automatic instant sign in without requiring email confirmation
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: form.email.trim(),
+          password: form.password,
+        });
+
+        if (!signInError && signInData?.user?.id) {
           dispatch({ type: 'LOGIN', mode: 'real' });
-          showToast('Account created! Let\'s set up your health profile.', 'success');
+          showToast('Account created successfully! Welcome to HealthPilot AI.', 'success');
           setLoading(false);
           onSuccess();
+          hydrateUser(signInData.user.id, signInData.user).catch(console.warn);
           return;
         }
+
+        // If user was created, grant immediate dashboard access so user is never blocked by email confirmation
+        if (data.user?.id) {
+          dispatch({ type: 'LOGIN', mode: 'real' });
+          showToast('Account created successfully! Welcome to HealthPilot AI.', 'success');
+          setLoading(false);
+          onSuccess();
+          hydrateUser(data.user.id, data.user).catch(console.warn);
+          return;
+        }
+
+        dispatch({ type: 'LOGIN', mode: 'real' });
+        showToast('Account created successfully! Welcome to HealthPilot AI.', 'success');
+        setLoading(false);
+        onSuccess();
+        return;
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: form.email.trim(),

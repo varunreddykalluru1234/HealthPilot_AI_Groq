@@ -66,7 +66,6 @@ function AppContent() {
     }
 
     if (params.get('confirmed') === 'true' || hash.includes('type=signup') || hash.includes('type=email_change')) {
-      showToast('Email verified successfully! Welcome to HealthPilot AI.', 'success');
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
